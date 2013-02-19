@@ -1,6 +1,7 @@
 SET(DGTAL_TOOLS_SRC
   shapeGenerator
   contourGenerator
+  samplePolynomialSurface
 )
 
 FOREACH(FILE ${DGTAL_TOOLS_SRC})
