@@ -50,12 +50,37 @@
 //Grid curve
 #include "DGtal/geometry/curves/FreemanChain.h"
 #include "DGtal/geometry/curves/GridCurve.h"
+#include "DGtal/geometry/curves/ArithmeticalDSS.h"
+#include "DGtal/geometry/curves/SaturatedSegmentation.h"
+#include "DGtal/math/Statistic.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 namespace po = boost::program_options;
 
 using namespace DGtal;
 
+template <typename KSpace, typename Iterator>
+void analyseLengthMS( Statistic<double> & stat, Iterator itb, Iterator ite )
+{
+  typedef typename KSpace::Space Space;
+  typedef typename Space::Point Point;
+  typedef ArithmeticalDSS<Iterator,int,4> SegmentComputer;
+  typedef SaturatedSegmentation<SegmentComputer> Decomposition;
+  typedef typename Decomposition::SegmentComputerIterator SegmentComputerIterator;
+  // Computes the tangential cover
+  SegmentComputer algo;
+  Decomposition theDecomposition( itb, ite, algo);
+  stat.clear();
+  for ( SegmentComputerIterator scIt = theDecomposition.begin(), scItEnd = theDecomposition.end();
+	scIt != scItEnd; ++scIt )
+    {
+      const SegmentComputer & sc = *scIt;
+      int64_t l = 0; 
+      for ( Iterator ptIt = sc.begin(), ptItEnd = sc.end(); ptIt != ptItEnd; ++ptIt )
+	++l;
+      stat.addValue( (double) l );
+    }
+}
 
 int main( int argc, char** argv )
 {
@@ -98,9 +123,11 @@ int main( int argc, char** argv )
     // Freeman chain
     FreemanChain fc = vectFcs.at(i); 
     // Create GridCurve
-    GridCurve<> gridcurve;
+    GridCurve< KSpace > gridcurve;
     gridcurve.initFromPointsRange( fc.begin(), fc.end() );
-    
+    typedef GridCurve<KSpace>::PointsRange Range;
+    Range r = gridcurve.getPointsRange();//building range
+   
     trace.info() << "# grid curve " << i+1 << "/" 
 		 << gridcurve.size() << " "
 		 << ( (gridcurve.isClosed())?"closed":"open" ) << std::endl;
