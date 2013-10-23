@@ -7,6 +7,7 @@ SET(DGTAL_TOOLS_SRC
   curvatureMCMS
   tangentBC
   statisticsEstimators
+  2dContourAnalysis
 )
 
 FOREACH(FILE ${DGTAL_TOOLS_SRC})
