@@ -589,7 +589,7 @@ compareShapeEstimators( const std::string & filename,
             VisitorConstIterator iend;
 
             unsigned int cntIn = 0;
-            for( auto it = dshape->getDomain().begin(), ite = dshape->getDomain().end(); it != ite; ++it )
+            for( Z3i::Domain::ConstIterator it = dshape->getDomain().begin(), ite = dshape->getDomain().end(); it != ite; ++it )
             {
                 if( dshape->operator ()(*it))
                 {
