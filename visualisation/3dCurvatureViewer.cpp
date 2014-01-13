@@ -107,6 +107,7 @@ int main( int argc, char** argv )
     typedef ImageSelector< Z3i::Domain, bool>::Type Image;
     typedef SimpleThresholdForegroundPredicate< Image > ImagePredicate;
     typedef Z3i::KSpace KSpace;
+    typedef KSpace::Point Point;
     typedef typename KSpace::SCell SCell;
     typedef typename KSpace::Cell Cell;
     typedef typename KSpace::Surfel Surfel;
@@ -241,15 +242,19 @@ int main( int argc, char** argv )
             viewer << CustomColors3D( DGtal::Color(255,255,255,255),
                                       DGtal::Color(255,255,255,255))
                    << unsignedSurfel;
-
-
+            
+            Point c1 = K.sKCoords( *abegin2 );
+            Point c2 = K.sKCoords( K.sIndirectIncident( *abegin2, K.sOrthDir( *abegin2 ) ) );
+            
             //ColumnVector normal = current.vectors.column(0).getNormalized(); // don't show the normal
             ColumnVector curv1 = current.vectors.column(1).getNormalized();
             ColumnVector curv2 = current.vectors.column(2).getNormalized();
 
             CanonicSCellEmbedder< KSpace > embedder( K );
             double eps = 0.01;
-            RealPoint center = embedder( *abegin2 ) + eps*embedder( *abegin2 );
+            //RealPoint center = embedder( *abegin2 ) + eps*embedder( *abegin2 );
+            RealPoint v( c2[ 0 ] - c1[ 0 ], c2[ 1 ] - c1[ 1 ], c2[ 2 ] - c1[ 2 ] );
+            RealPoint center = embedder( *abegin2 ) + v*0.125;
 
 //            viewer.addLine ( center[0] - 0.5 * normal[ 0],
 //                             center[1] - 0.5 * normal[1],
