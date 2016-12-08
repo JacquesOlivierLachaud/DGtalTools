@@ -799,7 +799,8 @@ namespace DGtal {
         D0( calculus ), D1( calculus ), 
         dual_D0( calculus ), dual_D1( calculus ),
         primal_h0( calculus ), primal_h1( calculus ), primal_h2( calculus ),
-        dual_h0( calculus ), dual_h1( calculus ), dual_h2( calculus )
+        dual_h0( calculus ), dual_h1( calculus ), dual_h2( calculus ),
+        is_open( false )
     {}
     
     /**
@@ -808,14 +809,20 @@ namespace DGtal {
     * @param aKSpace the cellular grid space specifies the domain of
     * calculus (i.e. all the cells and incidence), which is cloned
     * inside the class.
+    *
+    * @param open if 'true' builds an open grid space (best for
+    * Neumann conditions), otherwise builds a closed space.
     */
-    void init( Clone<KSpace> aKSpace )
+    void init( Clone<KSpace> aKSpace, bool open = true )
     {
+      is_open           = open;
       calculus.myKSpace = aKSpace;
       const KSpace & K  = calculus.myKSpace;
       domain            = Domain( K.lowerBound(), K.upperBound() );
-      Point  p0         = K.uKCoords( K.lowerCell() );
-      Point  p1         = K.uKCoords( K.upperCell() );
+      Point  p0         = K.uKCoords( K.lowerCell() )
+                          + ( open ? Point::diagonal( 1 ) : Point::zero );
+      Point  p1         = K.uKCoords( K.upperCell() ) 
+                          - ( open ? Point::diagonal( 1 ) : Point::zero );
       cell_domain       = Domain( p0, p1 );
 
       if ( verbose > 0 ) trace.beginBlock("building AT functionnals");
@@ -907,6 +914,8 @@ namespace DGtal {
     /// hodge star: dual 2-form -> 2-form
     DualHodge2        dual_h2;
 
+    /// Tells if the space is open.
+    bool              is_open;
   };
 
 } // namespace DGtal

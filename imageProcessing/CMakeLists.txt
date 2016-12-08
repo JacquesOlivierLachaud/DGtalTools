@@ -5,6 +5,7 @@ if(WITH_EIGEN)
     at-u0-v1
     at-u2-v0
     at-u2-v00
+    at-u0-v11
     )
   FOREACH(FILE ${DGTAL_TOOLS_SRC})
     add_executable(${FILE} ${FILE})

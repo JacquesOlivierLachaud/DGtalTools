@@ -301,6 +301,11 @@ namespace DGtal
     // ----------------------- Solver --------------------------------------
   public:
     
+    /// Computes the metric G(u) for each vertex.
+    /// @param[in] u a primal 2-form.
+    /// @return the metric G(u) for each vertex as a primal 0-form.
+    PrimalForm0 computeGu( const PrimalForm2& u ) const;
+    
     /// Computes a solution to function(s) \a u given the input \a g and current \a v.
     /// @return 'true' iff the solver worked.
     bool solveU();

@@ -44,7 +44,7 @@ DGtal::ATu0v11<TKSpace, TLinearAlgebra>::
 ATu0v11( int _verbose )
   : Base( _verbose ),
     v1( calculus ), former_v1( calculus ), 
-    L1( calculus ), alpha_Id0( calculus ),
+    M01( calculus ), L1( calculus ), alpha_Id0( calculus ),
     l_L1( calculus ), l_1_over_4( calculus ), 
     left_V1( calculus ), l_1_over_4e( calculus )
 {}
@@ -61,6 +61,9 @@ init( Clone<KSpace> aKSpace )
                 + dual_h1 * dual_D0 * primal_h2 * D1 );
   // JOL: Does not work ! Sign problem ?
   // L1  = -1.0 * ( D0 * AD1 + AD2 * D1 ); 
+  if ( verbose > 1 ) trace.info() << "M01" << std::endl;
+  M01 = calculus.template derivative<0, PRIMAL>();
+  M01.myContainer = .5 * M01.myContainer.cwiseAbs();
   if ( verbose > 1 ) trace.info() << "v1" << std::endl;
   v1 = KForm<Calculus, 1, PRIMAL>::ones( calculus );
   if ( verbose > 0 ) trace.endBlock();
@@ -215,26 +218,41 @@ solveV()
   auto  grad_u_x = grad_u.coordAlongDirection( 0 ); 
   auto  grad_u_y = grad_u.coordAlongDirection( 1 ); 
   PrimalForm1 Gu( calculus );
-  const Index nb = v1.length();
+  const Index nb = Gu.length();
+  Scalar Gu_min  = 1.0;
+  Scalar Gu_max  = 0.0;
+  const Scalar vEps = 0.001;
   for ( Index index = 0; index < nb; index++)
     {
+      typedef typename KSpace::Cell Cell;
       Cell edge   = K.unsigns( v1.getSCell( index ) );
       Dimension i = * K.uDirs( edge );
       Cell vtx1   = K.uIncident( edge, i, true ); 
       Cell vtx2   = K.uIncident( edge, i, false ); 
       Index i1    = calculus.getCellIndex( vtx1 );
       Index i2    = calculus.getCellIndex( vtx2 );
-      Gu.myContainer( index ) = 
-        0.5 * fabs( grad_u_x.myContainer( i1 ) ) 
-        / sqrt( grad_u_x.myContainer( i1 ) * grad_u_x.myContainer( i1 )
-                + grad_u_y.myContainer( i1 ) * grad_u_y.myContainer( i1 ) )
-        + 0.5 * fabs( grad_u_x.myContainer( i2 ) ) 
-        / sqrt( grad_u_x.myContainer( i2 ) * grad_u_x.myContainer( i2 )
-                + grad_u_y.myContainer( i2 ) * grad_u_y.myContainer( i2 ) );
+      Scalar gu1  = sqrt( grad_u_x.myContainer( i1 ) * grad_u_x.myContainer( i1 )
+                          + grad_u_y.myContainer( i1 ) * grad_u_y.myContainer( i1 ) );
+      Scalar gu2  = sqrt( grad_u_x.myContainer( i2 ) * grad_u_x.myContainer( i2 )
+                          + grad_u_y.myContainer( i2 ) * grad_u_y.myContainer( i2 ) );
+      if ( i == 0 )
+        Gu.myContainer( index ) = 
+          0.5 * ( vEps + fabs( grad_u_x.myContainer( i1 ) ) ) / ( vEps + gu1 )
+          + 0.5 * ( vEps + fabs( grad_u_x.myContainer( i2 ) ) ) / ( vEps + gu2 );
+      else
+        Gu.myContainer( index ) = 
+          0.5 * ( vEps + fabs( grad_u_y.myContainer( i1 ) ) ) / ( vEps + gu1 )
+          + 0.5 * ( vEps + fabs( grad_u_y.myContainer( i2 ) ) ) / ( vEps + gu2 );
+      Gu_min = std::min( Gu_min, Gu.myContainer( index ) );
+      Gu_max = std::max( Gu_max, Gu.myContainer( index ) );
     }
+  if ( verbose > 0 )
+    trace.info() << "- Gu in [ " << Gu_min << " , " << Gu_max << " ] " << std::endl;
 
   // Not the same result as below ! Seems the "good" way of doing it.
-  PrimalIdentity1 N  = left_V1 + (lambda/(4.0*epsilon)) * functions::dec::diagonal( Gu );
+  PrimalIdentity1 N  = left_V1 + (lambda/(4.0*epsilon))
+    * functions::dec::diagonal( Gu );
+    // * calculus.template identity<1, PRIMAL>();
   for ( Dimension i = 0; i < u0.size(); ++i )
     {
       PrimalIdentity1 U2 = functions::dec::squaredDiagonal( D0 * u0[ i ] );
@@ -256,6 +274,7 @@ solveV()
   solver_v.compute( N );
   if ( verbose > 1 ) trace.info() << "- solving N v = l/4e 1" << std::endl;
   v1 = solver_v.solve( (lambda/(4.0*epsilon)) * Gu );
+  // v1 = solver_v.solve( l_1_over_4e );
   if ( verbose > 1 ) trace.info() << ( solver_v.isValid() ? "OK" : "ERROR" )
                                   << " " << solver_v.myLinearAlgebraSolver.info()
                                   << std::endl;

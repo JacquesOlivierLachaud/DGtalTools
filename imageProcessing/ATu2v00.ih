@@ -214,7 +214,28 @@ setUFromInputAndMask()
         }      
     }
 }
-
+//-----------------------------------------------------------------------------
+template <typename TKSpace, typename TLinearAlgebra>
+typename DGtal::ATu2v00<TKSpace, TLinearAlgebra>::PrimalForm0
+DGtal::ATu2v00<TKSpace, TLinearAlgebra>::
+computeGu( const PrimalForm2 & u ) const
+{
+  // We have to compute the metric G(u).
+  PrimalForm1 du = primal_AD2 * u;
+  auto    grad_u = calculus.sharp( du );
+  auto  grad_u_x = grad_u.coordAlongDirection( 0 ); 
+  auto  grad_u_y = grad_u.coordAlongDirection( 1 ); 
+  PrimalForm0 Gu( calculus );
+  const Index nb = v0.length();
+  for ( Index index = 0; index < nb; index++)
+    Gu.myContainer( index ) =
+      ( 0.00001
+        + sqrt( grad_u_x.myContainer( index ) * grad_u_x.myContainer( index )
+                + grad_u_y.myContainer( index ) * grad_u_y.myContainer( index ) ) )
+      / ( 0.00001 + fabs( grad_u_x.myContainer( index ) )
+          + fabs( grad_u_y.myContainer( index ) ) );
+  return Gu;
+}
 //-----------------------------------------------------------------------------
 template <typename TKSpace, typename TLinearAlgebra>
 bool
@@ -228,13 +249,30 @@ solveU()
   // JOL: clarify sign below.
   const PrimalIdentity2 M = alpha_Id2
     + primal_AD2.transpose() * diag_Mv_squared * primal_AD2;
+  // Computing d G(u) / du
+  PrimalForm0 cv = KForm< Calculus, 0, PRIMAL >::ones( calculus )
+    - ( 2.0 * v0 ) + ( functions::dec::diagonal( v0 ) * v0 );
+  PrimalForm2 DG = KForm< Calculus, 2, PRIMAL >::zeros( calculus );
+  for ( Dimension i = 0; i < u2.size(); ++i )
+    {
+      PrimalForm0 Gu = computeGu( u2[ i ] );
+      const double t = 0.001;
+      for ( Index index = 0; index < DG.length(); index++)
+        {
+          PrimalForm2 u = u2[ i ]; u.myContainer[ index ] += t;
+          PrimalForm0 delta_Gu =  computeGu( u ) - Gu;
+          // The / 2 is because all other derivatives are divided by 2.
+          DG.myContainer( index ) += cv.myContainer.dot( delta_Gu.myContainer )/ (2.0*t);
+        }
+    }
+  
   if ( verbose > 1 ) trace.info() << "- prefactoring matrix M" << std::endl;
   solver_u.compute( M );
   bool ok = true;
   for ( Dimension i = 0; i < u2.size(); ++i )
     {
       if ( verbose > 1 ) trace.info() << "- solving M u[" << i << "] = alpha g[" << i << "]" << std::endl;
-      u2[ i ] = solver_u.solve( alpha_g2[ i ] );
+      u2[ i ] = solver_u.solve( alpha_g2[ i ] - ( lambda / ( 4.0 * epsilon ) ) * DG );
       if ( verbose > 1 ) trace.info() << ( solver_u.isValid() ? "=> OK" : "ERROR" ) << " " << solver_u.myLinearAlgebraSolver.info() << std::endl;
       ok = ok && solver_u.isValid();
     }
@@ -253,19 +291,9 @@ solveV()
   if ( verbose > 1 ) trace.info() << "- building matrix N := l/4e diag( G(u) ) + le A tA + tM01 sum Diag(B' u_i)^2 M01" << std::endl;
 
   // We have to compute the metric G(u).
-  PrimalForm2 mu = u2[ 0 ];
+  PrimalForm0 Gu = computeGu( u2[ 0 ] );
   for ( Dimension i = 1; i < u2.size(); ++i )
-    mu.myContainer += u2[ i ].myContainer;
-  PrimalForm1 du = primal_AD2 * mu;
-  auto    grad_u = calculus.sharp( du );
-  auto  grad_u_x = grad_u.coordAlongDirection( 0 ); 
-  auto  grad_u_y = grad_u.coordAlongDirection( 1 ); 
-  PrimalForm0 Gu( calculus );
-  const Index nb = v0.length();
-  for ( Index index = 0; index < nb; index++)
-    Gu.myContainer( index ) = sqrt( grad_u_x.myContainer( index ) * grad_u_x.myContainer( index )
-                                    + grad_u_y.myContainer( index ) * grad_u_y.myContainer( index ))
-      / ( fabs( grad_u_x.myContainer( index ) ) + fabs( grad_u_y.myContainer( index ) ) );
+    Gu.myContainer += computeGu( u2[ i ] ).myContainer;
   
   PrimalForm1 squared_norm_D_u2 = PrimalForm1::zeros(calculus);
   PrimalIdentity1 U2 = functions::dec::squaredDiagonal( primal_AD2 * u2[ 0 ] );

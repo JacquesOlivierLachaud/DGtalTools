@@ -331,6 +331,8 @@ namespace DGtal
     /// The Linfinity-norm of variation of v.
     Scalar delta_v_loo;
 
+    /// point_to_edge average operator
+    PrimalDerivative0     M01;
     /// edge laplacien
     PrimalIdentity1       L1;
 
