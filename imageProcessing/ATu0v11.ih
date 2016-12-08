@@ -207,7 +207,7 @@ solveV()
   const KSpace & K = calculus.myKSpace;
   former_v1 = v1;
   if ( verbose > 0 ) trace.beginBlock("Solving for v");
-  if ( verbose > 1 ) trace.info() << "- building matrix N := l/4e Id1 + le (tA' A' + tB B) + sum Diag(Au_i)^2" << std::endl;
+  if ( verbose > 1 ) trace.info() << "- building matrix N := l/4e diag( G(v) ) + le (tA' A' + tB B) + sum Diag(Au_i)^2" << std::endl;
 
   // We have to compute the metric G(u).
   PrimalForm0 mu = u0[ 0 ];
@@ -272,7 +272,7 @@ solveV()
           trace.info() << "[" << it.row() << "," << it.col() << "] = " << it.value() << std::endl;
   if ( verbose > 1 ) trace.info() << "- prefactoring matrix N" << std::endl;
   solver_v.compute( N );
-  if ( verbose > 1 ) trace.info() << "- solving N v = l/4e 1" << std::endl;
+  if ( verbose > 1 ) trace.info() << "- solving N v = l/4e G(u)" << std::endl;
   v1 = solver_v.solve( (lambda/(4.0*epsilon)) * Gu );
   // v1 = solver_v.solve( l_1_over_4e );
   if ( verbose > 1 ) trace.info() << ( solver_v.isValid() ? "OK" : "ERROR" )
