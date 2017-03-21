@@ -49,7 +49,7 @@
 #include "ATu2v0.h"
 
 /**
-@page DocATu2v0 imageProcessing/at-u2-v0 
+@page DocATu2v0 imageProcessing/at-u2-v0
 
 @brief Computes a piecewise smooth approximation of a grey-level or color image, by optimizing the Ambrosio-Tortorelli functional (with u a 2-form and v a 0-form).
 
@@ -122,24 +122,24 @@ For more details, see \ref moduleAT
   -l [ --lambda ] arg                   the parameter lambda.
   -1 [ --lambda-1 ] arg (=0.3125)       the initial parameter lambda (l1).
   -2 [ --lambda-2 ] arg (=0.0005)       the final parameter lambda (l2).
-  -q [ --lambda-ratio ] arg (=1.414213) the division ratio for lambda from l1 
+  -q [ --lambda-ratio ] arg (=1.414213) the division ratio for lambda from l1
                                         to l2.
   -a [ --alpha ] arg (=1)               the parameter alpha.
   -e [ --epsilon ] arg                  the initial and final parameter epsilon
                                         of AT functional at the same time.
   --epsilon-1 arg (=2)                  the initial parameter epsilon.
   --epsilon-2 arg (=0.25)               the final parameter epsilon.
-  --epsilon-r arg (=2)                  sets the ratio between two consecutive 
+  --epsilon-r arg (=2)                  sets the ratio between two consecutive
                                         epsilon values of AT functional.
   -n [ --nbiter ] arg (=10)             the maximum number of iterations.
-  --image-snr arg                       the input image without deterioration 
+  --image-snr arg                       the input image without deterioration
                                         if you wish to compute the SNR.
-  -p [ --pixel-size ] arg (=1)          the pixel size for outputing images 
-                                        (useful when one wants to see the 
+  -p [ --pixel-size ] arg (=1)          the pixel size for outputing images
+                                        (useful when one wants to see the
                                         discontinuities v on top of u).
-  -c [ --color-v ] arg (=0xff0000)      the color chosen for displaying the 
+  -c [ --color-v ] arg (=0xff0000)      the color chosen for displaying the
                                         singularities v (e.g. red is 0xff0000).
-  -v [ --verbose ] arg (=0)             the verbose level (0: silent, 1: less 
+  -v [ --verbose ] arg (=0)             the verbose level (0: silent, 1: less
                                         silent, etc).
 \endcode
 
@@ -197,7 +197,10 @@ int main( int argc, char* argv[] )
     ("lambda-1,1", po::value<double>()->default_value( 0.3125 ), "the initial parameter lambda (l1)." )
     ("lambda-2,2", po::value<double>()->default_value( 0.0005 ), "the final parameter lambda (l2)." )
     ("lambda-ratio,q", po::value<double>()->default_value( sqrt(2) ), "the division ratio for lambda from l1 to l2." )
-    ("alpha,a", po::value<double>()->default_value( 1.0 ), "the parameter alpha." )
+    ("alpha,a", po::value<double>(), "the parameter alpha." )
+    ("alpha-1", po::value<double>()->default_value( 1.0 ), "the parameter a1." )
+    ("alpha-2", po::value<double>()->default_value( 1.0 ), "the parameter a2." )
+    ("alpha-r", po::value<double>()->default_value( 1.0 ), "the division ratio for lambda from a1 to a2." )
     ("epsilon,e", po::value<double>(), "the initial and final parameter epsilon of AT functional at the same time." )
     ("epsilon-1", po::value<double>()->default_value( 2.0 ), "the initial parameter epsilon." )
     ("epsilon-2", po::value<double>()->default_value( 0.25 ), "the final parameter epsilon." )
@@ -248,7 +251,13 @@ int main( int argc, char* argv[] )
   if ( vm.count( "lambda" ) ) l1 = l2 = vm[ "lambda" ].as<double>();
   if ( l2 > l1 ) l2 = l1;
   if ( lr <= 1.0 ) lr = sqrt(2);
-  double a   = vm[ "alpha" ].as<double>();
+  //double a   = vm[ "alpha" ].as<double>();
+  double a1  = vm[ "alpha-1" ].as<double>();
+  double a2  = vm[ "alpha-2" ].as<double>();
+  double ar  = vm[ "alpha-r" ].as<double>();
+  if ( vm.count( "alpha" ) ) a1 = a2 = vm[ "alpha" ].as<double>();
+  if ( a2 > a1 ) a2 = a1;
+  if ( ar <= 1.0 ) ar = sqrt(2);
   double e1  = vm[ "epsilon-1" ].as<double>();
   double e2  = vm[ "epsilon-2" ].as<double>();
   if ( vm.count( "epsilon" ) )
@@ -264,23 +273,36 @@ int main( int argc, char* argv[] )
 
   bool color_image = f1.size() > 4 && f1.compare( f1.size() - 4, 4, ".ppm" ) == 0;
   bool grey_image  = f1.size() > 4 && f1.compare( f1.size() - 4, 4, ".pgm" ) == 0;
-  if ( ! color_image && ! grey_image ) 
+  if ( ! color_image && ! grey_image )
     {
       trace.error() << "Input image file must be either a PGM (grey-level) or a PPM (color) image with these extensions."
                     << endl;
       return 2;
     }
 
+  ostringstream ossF;
+  ossF << boost::format("%s.txt") % f2;
+  //const string file = f2 + ".txt";
+  const string file = ossF.str();
+  ofstream f(file.c_str());
+  f << "# l \t"
+    << " a \t"
+    << " e \t"
+    << " AT \t"
+    << " g_snr \t"
+    << " u_snr"
+    << endl;
+
   KSpace K;
   ATu2v0< KSpace > AT( verb );
   Domain domain;
   AT.setMetricAverage( metric );
-  
+
   typedef ATu2v0<KSpace>::Calculus Calculus;
   typedef ImageContainerBySTLVector<Domain, Color> ColorImage;
   typedef ImageContainerBySTLVector<Domain, unsigned char> GreyLevelImage;
   //---------------------------------------------------------------------------
-  if ( color_image ) 
+  if ( color_image )
     {
       trace.beginBlock("Reading PPM image");
       ColorImage image = PPMReader<ColorImage>::importPPM( f1 );
@@ -294,7 +316,7 @@ int main( int argc, char* argv[] )
       AT.addInput( image, [] ( Color c ) -> double { return ((double) c.blue())  / 255.0; } );
       trace.endBlock();
     }
-  else if ( grey_image ) 
+  else if ( grey_image )
     {
       trace.beginBlock("Reading PGM image");
       GreyLevelImage image = PGMReader<GreyLevelImage>::importPGM( f1 );
@@ -308,7 +330,7 @@ int main( int argc, char* argv[] )
     }
 
   //---------------------------------------------------------------------------
-  if ( snr && color_image ) 
+  if ( snr && color_image )
     {
       trace.beginBlock("Reading ideal PPM image");
       ColorImage image = PPMReader<ColorImage>::importPPM( isnr );
@@ -317,17 +339,17 @@ int main( int argc, char* argv[] )
       AT.addInput( image, [] ( Color c ) -> double { return ((double) c.green()) / 255.0; }, true );
       AT.addInput( image, [] ( Color c ) -> double { return ((double) c.blue())  / 255.0; }, true );
     }
-  else if ( snr && grey_image ) 
+  else if ( snr && grey_image )
     {
       trace.beginBlock("Reading ideal PGM image");
       GreyLevelImage image = PGMReader<GreyLevelImage>::importPGM( isnr );
       trace.endBlock();
       AT.addInput( image, [] (unsigned char c ) { return ((double) c) / 255.0; }, true );
     }
-  
+
   //---------------------------------------------------------------------------
   // Prepare zoomed output domain
-  Domain out_domain( pix_sz * domain.lowerBound(), 
+  Domain out_domain( pix_sz * domain.lowerBound(),
                      pix_sz * domain.upperBound() + Point::diagonal( pix_sz ) );
   //---------------------------------------------------------------------------
   AT.setUFromInput();
@@ -346,7 +368,7 @@ int main( int argc, char* argv[] )
           double col = ((double) mask( K.sCoords( cell ) )) / 255.0;
           m.myContainer( index ) = col > 0.0 ? 1.0 : 0.0;
         }
-      AT.setAlpha( a, m );
+      AT.setAlpha( a1, m );
       AT.setUFromInputAndMask();
       if ( grey_image )
         {
@@ -355,7 +377,7 @@ int main( int argc, char* argv[] )
           GreyLevelImage image_mg( domain );
           const Calculus::PrimalForm2 mg = functions::dec::diagonal( m ) * AT.getG( 0 );
           functions::dec::form2ToGreyLevelImage
-            ( AT.calculus, mg, image_mg, 0.0, 1.0, 1 ); 
+            ( AT.calculus, mg, image_mg, 0.0, 1.0, 1 );
           PGMWriter<GreyLevelImage>::exportPGM( ossGM.str(), image_mg );
         }
       else if ( color_image )
@@ -367,17 +389,27 @@ int main( int argc, char* argv[] )
           const Calculus::PrimalForm2 mg1 = functions::dec::diagonal( m ) * AT.getG( 1 );
           const Calculus::PrimalForm2 mg2 = functions::dec::diagonal( m ) * AT.getG( 2 );
           functions::dec::threeForms2ToRGBColorImage
-            ( AT.calculus, mg0, mg1, mg2, image_mg, 0.0, 1.0, 1 ); 
+            ( AT.calculus, mg0, mg1, mg2, image_mg, 0.0, 1.0, 1 );
           PPMWriter<ColorImage, functors::Identity >::exportPPM( ossGM.str(), image_mg );
         }
     }
-  else 
-    AT.setAlpha( a );
-  
+  else
+    AT.setAlpha( a1 );
+
   trace.info() << AT << std::endl;
   double n_v = 0.0;
   double eps = 0.0;
-  while ( l1 >= l2 )
+
+  double l = l1;
+
+  while ( a1 >= a2 )
+  {
+    trace.info() << "[--------- alpha = " << a1 << " ---------]" << endl;
+    AT.setAlpha( a1 );
+    AT.init( K );
+    AT.setUFromInput();
+    l1 = l;
+    while ( l1 >= l2 )
     {
       trace.info() << "************ lambda = " << l1 << " **************" << endl;
       AT.setLambda( l1 );
@@ -396,33 +428,33 @@ int main( int argc, char* argv[] )
           trace.progressBar( n, nbiter );
           trace.info() << "[#### last variation = " << n_v << " " << endl;
         }
-      if ( grey_image ) 
+      if ( grey_image )
         {
           if ( verb > 0 ) trace.beginBlock("Writing u[0] as PGM image");
           ostringstream ossU, ossV, ossW;
-          ossU << boost::format("%s-a%.5f-l%.7f-u.pgm") % f2 % a % l1;
-          ossV << boost::format("%s-a%.5f-l%.7f-u-v.pgm") % f2 % a % l1;
-          ossW << boost::format("%s-a%.5f-l%.7f-u-v.ppm") % f2 % a % l1;
+          ossU << boost::format("%s-a%.5f-l%.7f-u2.pgm") % f2 % a1 % l1;
+          ossV << boost::format("%s-a%.5f-l%.7f-u2-v0.pgm") % f2 % a1 % l1;
+          ossW << boost::format("%s-a%.5f-l%.7f-u2-v0.ppm") % f2 % a1 % l1;
           const Calculus::PrimalForm2 u = AT.getU( 0 );
           const Calculus::PrimalForm1 v = AT.M01 * AT.getV();
           // Restored image
           GreyLevelImage image_u( domain );
           functions::dec::form2ToGreyLevelImage
-            ( AT.calculus, u, image_u, 0.0, 1.0, 1 ); 
+            ( AT.calculus, u, image_u, 0.0, 1.0, 1 );
           PGMWriter<GreyLevelImage>::exportPGM( ossU.str(), image_u );
-          // Zoomed restored image with discontinuities (in black).
-          GreyLevelImage image_uv( out_domain );
-          functions::dec::form2ToGreyLevelImage
-            ( AT.calculus, u, image_uv, 0.0, 1.0, pix_sz ); 
-          functions::dec::primalForm1ToGreyLevelImage
-            ( AT.calculus, v, image_uv, 0.0, 1.0, pix_sz ); 
-          PGMWriter<GreyLevelImage>::exportPGM( ossV.str(), image_uv );
+//          // Zoomed restored image with discontinuities (in black).
+//          GreyLevelImage image_uv( out_domain );
+//          functions::dec::form2ToGreyLevelImage
+//            ( AT.calculus, u, image_uv, 0.0, 1.0, pix_sz );
+//          functions::dec::primalForm1ToGreyLevelImage
+//            ( AT.calculus, v, image_uv, 0.0, 1.0, pix_sz );
+//          PGMWriter<GreyLevelImage>::exportPGM( ossV.str(), image_uv );
           // Zoomed restored image with discontinuities (in specified color).
           ColorImage cimage( out_domain );
           functions::dec::threeForms2ToRGBColorImage
-            ( AT.calculus, u, u, u, cimage, 0.0, 1.0, pix_sz ); 
+            ( AT.calculus, u, u, u, cimage, 0.0, 1.0, pix_sz );
           functions::dec::primalForm1ToRGBColorImage
-            ( AT.calculus, v, cimage, color_v, 0.0, 1.0, pix_sz ); 
+            ( AT.calculus, v, cimage, color_v, 0.0, 1.0, pix_sz );
           PPMWriter<ColorImage, functors::Identity >::exportPPM( ossW.str(), cimage );
           if ( verb > 0 ) trace.endBlock();
         }
@@ -430,8 +462,8 @@ int main( int argc, char* argv[] )
         {
           if ( verb > 0 ) trace.beginBlock("Writing u[0,1,2] as PGM image");
           ostringstream ossU, ossV;
-          ossU << boost::format("%s-a%.5f-l%.7f-u.ppm") % f2 % a % l1;
-          ossV << boost::format("%s-a%.5f-l%.7f-u-v.ppm") % f2 % a % l1;
+          ossU << boost::format("%s-a%.5f-l%.7f-u2.ppm") % f2 % a1 % l1;
+          ossV << boost::format("%s-a%.5f-l%.7f-u2-v0.ppm") % f2 % a1 % l1;
           const Calculus::PrimalForm2 u0 = AT.getU( 0 );
           const Calculus::PrimalForm2 u1 = AT.getU( 1 );
           const Calculus::PrimalForm2 u2 = AT.getU( 2 );
@@ -439,23 +471,37 @@ int main( int argc, char* argv[] )
           // Restored image
           ColorImage image_u( domain );
           functions::dec::threeForms2ToRGBColorImage
-            ( AT.calculus, u0, u1, u2, image_u, 0.0, 1.0, 1 ); 
+            ( AT.calculus, u0, u1, u2, image_u, 0.0, 1.0, 1 );
           PPMWriter<ColorImage, functors::Identity >::exportPPM( ossU.str(), image_u );
           ColorImage image_uv( out_domain );
           functions::dec::threeForms2ToRGBColorImage
-            ( AT.calculus, u0, u1, u2, image_uv, 0.0, 1.0, pix_sz ); 
+            ( AT.calculus, u0, u1, u2, image_uv, 0.0, 1.0, pix_sz );
           functions::dec::primalForm1ToRGBColorImage
-            ( AT.calculus, v, image_uv, color_v, 0.0, 1.0, pix_sz ); 
+            ( AT.calculus, v, image_uv, color_v, 0.0, 1.0, pix_sz );
           PPMWriter<ColorImage, functors::Identity >::exportPPM( ossV.str(), image_uv );
           if ( verb > 0 ) trace.endBlock();
         }
+      // write energy in file
+      f << l1  << "\t"
+        << a1   << "\t"
+        << eps << "\t"
+        << AT.computeEnergy() << "\t";
       // Compute SNR if possible
       if ( snr )
         {
           double u_snr = AT.computeSNR();
           trace.info() << "- SNR of u = " << u_snr << "   SNR of g = " << g_snr << endl;
+          f << g_snr << "\t"
+            << u_snr << endl;
+        }
+      else
+        {
+          f << "0" << "\t"
+            << "0" << endl;
         }
       l1 /= lr;
     }
+    a1 /= ar;
+  }
   return 0;
 }
