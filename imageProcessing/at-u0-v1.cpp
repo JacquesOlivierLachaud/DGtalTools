@@ -123,7 +123,11 @@ For more details, see \ref moduleAT
   -2 [ --lambda-2 ] arg (=0.0005)       the final parameter lambda (l2).
   -q [ --lambda-ratio ] arg (=1.414213) the division ratio for lambda from l1
                                         to l2.
-  -a [ --alpha ] arg (=1)               the parameter alpha.
+  -a [ --alpha ] arg                    the parameter alpha.
+  --alpha-1 arg (=1)                    the initial parameter alpha (a1).
+  --alpha-2 arg (=0.125)                the final parameter alpha (a2).
+  --alpha-r arg (=2)                    the division ratio for alpha from a1 to
+                                        a2.
   -e [ --epsilon ] arg                  the initial and final parameter epsilon
                                         of AT functional at the same time.
   --epsilon-1 arg (=2)                  the initial parameter epsilon.
@@ -194,9 +198,9 @@ int main( int argc, char* argv[] )
     ("lambda-2,2", po::value<double>()->default_value( 0.0005 ), "the final parameter lambda (l2)." )
     ("lambda-ratio,q", po::value<double>()->default_value( sqrt(2) ), "the division ratio for lambda from l1 to l2." )
     ("alpha,a", po::value<double>(), "the parameter alpha." )
-    ("alpha-1", po::value<double>()->default_value( 1.0 ), "the parameter a1." )
-    ("alpha-2", po::value<double>()->default_value( 1.0 ), "the parameter a2." )
-    ("alpha-r", po::value<double>()->default_value( 1.0 ), "the division ratio for lambda from a1 to a2." )
+    ("alpha-1", po::value<double>()->default_value( 1.0 ), "the initial parameter alpha (a1)." )
+    ("alpha-2", po::value<double>()->default_value( 0.125 ), "the final parameter alpha (a2)." )
+    ("alpha-r", po::value<double>()->default_value( 2.0 ), "the division ratio for alpha from a1 to a2." )
     ("epsilon,e", po::value<double>(), "the initial and final parameter epsilon of AT functional at the same time." )
     ("epsilon-1", po::value<double>()->default_value( 2.0 ), "the initial parameter epsilon." )
     ("epsilon-2", po::value<double>()->default_value( 0.25 ), "the final parameter epsilon." )
