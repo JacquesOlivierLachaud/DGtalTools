@@ -404,7 +404,10 @@ int main( int argc, char* argv[] )
 
   while ( a1 >= a2 )
   {
-    trace.info() << "[--------- alpha = " << a1 << " ---------]" << endl;
+    //trace.info() << "[--------- alpha = " << a1 << " ---------]" << endl;
+    ostringstream ossBlock;
+    ossBlock << boost::format("alpha = %.5f") % a1;
+    trace.beginBlock(ossBlock.str());
     AT.setAlpha( a1 );
     AT.init( K );
     AT.setUFromInput();
@@ -502,6 +505,7 @@ int main( int argc, char* argv[] )
       l1 /= lr;
     }
     a1 /= ar;
+    trace.endBlock();
   }
   return 0;
 }
