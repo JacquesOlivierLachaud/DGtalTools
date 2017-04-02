@@ -46,6 +46,7 @@
 #include <DGtal/topology/helpers/Surfaces.h>
 #include <DGtal/math/linalg/EigenSupport.h>
 #include <DGtal/dec/DiscreteExteriorCalculus.h>
+#include <DGtal/dec/DiscreteExteriorCalculusFactory.h>
 #include <DGtal/dec/DiscreteExteriorCalculusSolver.h>
 #include "NormalEstimation.h"
 
@@ -75,13 +76,43 @@ namespace DGtal {
     typedef DigitalSurface< SurfaceStorage >     Surface;
     typedef std::map<SCell,RealVector>           VectorField;
     typedef VectorField                          NormalMap;
-    
+
+    struct AverageRealVector {
+      RealVector sum;
+      int nb;
+      AverageRealVector() : sum( RealVector::zero ), nb( 0 ) {}
+      AverageRealVector( const RealVector& v ) : sum( v ), nb( 1 ) {}
+      void add( const RealVector&v ) { sum += v; ++nb; }
+      RealVector get() const { RealVector v = sum / nb; return v; } // / v.norm(); }
+      void add( const AverageRealVector& av ) { sum += av.sum; nb += av.nb; }
+    };
+    struct AverageScalar {
+      Scalar sum;
+      int nb;
+      AverageScalar() : sum( 0.0 ), nb( 0 ) {}
+      AverageScalar( const Scalar& v ) : sum( v ), nb( 1 ) {}
+      void add( const Scalar&v ) { sum += v; ++nb; }
+      Scalar get() const { Scalar v = sum / nb; return v; }
+      void add( const AverageScalar& av ) { sum += av.sum; nb += av.nb; }
+    };
+
+    typedef std::map<Cell,AverageScalar>         CellScalarField; 
+    typedef std::map<Cell,AverageRealVector>     CellVectorField; 
+    typedef CellVectorField                      CellNormalMap;
+   
     typedef EigenLinearAlgebraBackend             LinearAlgebra;
     typedef HyperRectDomain<Space>                Domain;
     typedef DiscreteExteriorCalculus<3,3, LinearAlgebra>   Calculus;
+    typedef DiscreteExteriorCalculusFactory<LinearAlgebra> CalculusFactory;
     typedef Calculus::Index                       Index;
+    typedef Calculus::PrimalForm0                 PrimalForm0;
+    typedef Calculus::PrimalForm1                 PrimalForm1;
+    typedef Calculus::PrimalForm2                 PrimalForm2;
+    typedef Calculus::PrimalForm3                 PrimalForm3;
+    typedef Calculus::PrimalVectorField           PrimalVectorField;
     typedef Calculus::DualForm0                   DualForm0;
     typedef Calculus::DualForm1                   DualForm1;
+    typedef Calculus::PrimalIdentity0             PrimalIdentity0;
     typedef Calculus::DualIdentity0               DualIdentity0;
     typedef Calculus::PrimalDerivative0           PrimalDerivative0;
     typedef Calculus::PrimalDerivative1           PrimalDerivative1;
@@ -99,7 +130,9 @@ namespace DGtal {
     typedef Calculus::DualHodge2                  DualHodge2;
     typedef LinearAlgebra::SolverSimplicialLLT    LinearAlgebraSolver;
     typedef DiscreteExteriorCalculusSolver<Calculus, LinearAlgebraSolver,
-                                           0, DUAL, 0, DUAL> SolverU;
+                                           0, DUAL, 0, DUAL> SolverDual;
+    typedef DiscreteExteriorCalculusSolver<Calculus, LinearAlgebraSolver,
+                                           0, PRIMAL, 0, PRIMAL> SolverPrimal;
 
     BOOST_STATIC_ASSERT(( KSpace::dimension == 3 ));
 
@@ -107,7 +140,8 @@ namespace DGtal {
     /// last vertex is computed as \f$ a + b-a + c-a \f$.
     inline
     ImplicitDigitalVolume( Clone<BooleanImage> anImage )
-      : calculus(), u( calculus ), bimage( anImage ), ptrSurface( 0 )
+      : calculus(), u( calculus ), primal_u( calculus ),
+        bimage( anImage ), ptrSurface( 0 )
     {
       K.init( bimage.domain().lowerBound(),
               bimage.domain().upperBound(), true );
@@ -127,13 +161,13 @@ namespace DGtal {
     ~ImplicitDigitalVolume() {}
 
     BooleanImage&  image()   { return bimage; }
+    const KSpace&  space() const { return K; }
     KSpace&        space()   { return K; }
     const Surface& surface() { return *ptrSurface; }
 
     /// computes the implicit function
-    void computeImplicitFunction()
+    void computeImplicitFunctionDual( const Scalar lambda = 0.001 )
     {
-      const Scalar alpha = 0.001;
       DGtal::trace.beginBlock( "Computing DEC" );
       DGtal::trace.info() << "- add cells" << std::endl;
       calculus.myKSpace = space();
@@ -150,8 +184,8 @@ namespace DGtal {
       DualDerivative0 dual_D0  = calculus.template derivative<0,DUAL>();
       DualAntiderivative1 dual_AD1  = calculus.template antiderivative<1,DUAL>();
       DualIdentity0   dual_Id0 = calculus.template identity  <0,DUAL>();
-      // DualIdentity0   M        = dual_D0.transpose() * dual_D0 + alpha * dual_Id0;
-      DualIdentity0   M        = dual_AD1 * dual_D0 + alpha * dual_Id0;
+      // DualIdentity0   M        = dual_D0.transpose() * dual_D0 + lambda * dual_Id0;
+      DualIdentity0   M        = dual_AD1 * dual_D0 + lambda * dual_Id0;
       DualForm1       n( calculus );
       DualForm0       f( calculus );
       DGtal::trace.info() << "- dual 1-form n and dual 0-form f" << std::endl;
@@ -179,34 +213,316 @@ namespace DGtal {
             ? Ne[ k ] : -Ne[ k ];
         }
       DGtal::trace.info() << "- prefactoring matrix M := A'^t A' + a Id" << std::endl;
-      SolverU solver;
+      SolverDual solver;
       solver.compute( M );
       DGtal::trace.info() << "- solving M u = A'^t n + a f" << std::endl;
-      // DualForm0 v = dual_D0.transpose() * n + alpha * f;
-      DualForm0 v = dual_AD1 * n + alpha * f;
+      // DualForm0 v = dual_D0.transpose() * n + lambda * f;
+      DualForm0 v = dual_AD1 * n + lambda * f;
       u = solver.solve( v );
       DGtal::trace.info() << ( solver.isValid() ? "=> OK" : "ERROR" )
                           << " " << solver.myLinearAlgebraSolver.info() << std::endl;
       // TODO
       DGtal::trace.endBlock();
+    }
+
+    SCell sShiftToPrimal( SCell cell ) const
+    {
+      Point kx = space().sKCoords( cell );
+      return space().sCell( kx - Point::diagonal( 1 ), space().sSign( cell ) );
+    }
+    SCell sShiftToDual( SCell cell ) const
+    {
+      Point kx = space().sKCoords( cell );
+      return space().sCell( kx + Point::diagonal( 1 ), space().sSign( cell ) );
+    }
+    Cell uShiftToPrimal( Cell cell ) const
+    {
+      Point kx = space().uKCoords( cell );
+      return space().uCell( kx - Point::diagonal( 1 ) );
+    }
+    Cell uShiftToDual( Cell cell ) const
+    {
+      Point kx = space().uKCoords( cell );
+      return space().uCell( kx + Point::diagonal( 1 ) );
+    }
+    
+    std::vector<Cell> pointels( const Cell& aCell ) const
+    {
+      auto cells = space().uFaces( aCell );
+      std::vector<Cell> pointels;
+      pointels.reserve( cells.size() );
+      for ( Cell c : cells )
+        if ( space().uDim( c ) == 0 ) pointels.push_back( c );
+      return pointels;
+    }
+    void addPointels( std::vector<Cell>& pointels, const Cell& aCell ) const
+    {
+      auto cells = space().uFaces( aCell );
+      for ( Cell c : cells )
+        if ( space().uDim( c ) == 0 ) pointels.push_back( c );
+    }
+
+    /// computes the implicit function (uses PRIMAL to avoid bug !?).
+    void computeImplicitFunctionPrimal( const Scalar lambda = 0.001 )
+    {
+      DGtal::trace.beginBlock( "Computing DEC" );
+      DGtal::trace.info() << "- add cells" << std::endl;
+      calculus.myKSpace = space();
+      // Inserts boundary voxels and boundary surfels.
+      std::set<SCell> bdry_voxels;
+      /// Map unsigned voxel -> input normal vector
+      CellVectorField  voxelNormals;
+      for ( auto it = normals.cbegin(), itE = normals.cend(); it != itE; ++it )
+        {
+          SCell  surfel = it->first;
+          Dimension k = space().sOrthDir( surfel );
+          SCell p_linel = sShiftToPrimal( surfel );
+          if ( space().sDirect( p_linel, k ) )
+            calculus.insertSCell( p_linel );
+          else
+            calculus.insertSCell( space().sOpp( p_linel ) );
+          RealVector Ne = it->second;
+          SCell ins_vox = space().sIncident( surfel, k, true );
+          SCell out_vox = space().sIncident( surfel, k, false );
+          bdry_voxels.insert( ins_vox );
+          bdry_voxels.insert( out_vox );
+          calculus.insertSCell( sShiftToPrimal( ins_vox ) );
+          calculus.insertSCell( sShiftToPrimal( out_vox ) );
+          voxelNormals[ space().unsigns( ins_vox ) ].add( Ne );
+          voxelNormals[ space().unsigns( out_vox ) ].add( Ne );
+        }
+      // Insert surfels in-between boundary voxels of the same kind.
+      // std::set<SCell> middle_surfels;
+      for ( auto voxel : bdry_voxels )
+        {
+          for ( Dimension k = 0; k < space().dimension; k++ )
+            {
+              SCell neighbor = space().sAdjacent( voxel, k, true );
+              if ( bdry_voxels.find( neighbor ) != bdry_voxels.end() )
+                {
+                  SCell surfel = space().sIncident( voxel, k, true );
+                  // middle_surfels.insert( surfel );
+                  SCell p_linel = sShiftToPrimal( surfel );
+                  if ( space().sDirect( p_linel, k ) )
+                    calculus.insertSCell( p_linel );
+                  else
+                    calculus.insertSCell( space().sOpp( p_linel ) );
+                }
+            }
+        }
+      calculus.updateIndexes();
+      DGtal::trace.info() << "- primal_D0" << std::endl;
+      PrimalDerivative0 primal_D0      = calculus.template derivative<0,PRIMAL>();
+      PrimalAntiderivative1 primal_AD1 = calculus.template antiderivative<1,PRIMAL>();
+      PrimalIdentity0   primal_Id0     = calculus.template identity  <0,PRIMAL>();
+      PrimalIdentity0   M              = primal_AD1 * primal_D0 + lambda * primal_Id0;
+      PrimalVectorField PN( calculus );
+      DGtal::trace.info() << "- primal vector field PN" << std::endl;
+      for ( Index idx = 0; idx < PN.length(); ++idx )
+        {
+          Cell voxel    = uShiftToDual( space().unsigns( PN.getSCell( idx ) ) );
+          RealVector vn = voxelNormals[ voxel ].get();
+          PN.setVector( idx, -1.0 * vn );
+        }
+      DGtal::trace.info() << "- primal 1-form n and primal 0-form f" << std::endl;
+      PrimalForm1 n = calculus.flat( PN );
+      PrimalForm0 f ( calculus );
+      for ( auto it = normals.cbegin(), itE = normals.cend(); it != itE; ++it )
+        {
+          SCell  surfel = it->first;
+          Dimension   k = space().sOrthDir( surfel );
+          SCell  in_vox = space().sDirectIncident( surfel, k );
+          SCell out_vox = space().sIndirectIncident( surfel, k );
+          Index in_idx  = calculus.getCellIndex
+            ( uShiftToPrimal( space().unsigns( in_vox ) ) );
+          Index out_idx = calculus.getCellIndex
+            ( uShiftToPrimal( space().unsigns( out_vox ) ) );
+          f.myContainer( in_idx )  = 1; // 0.5;
+          f.myContainer( out_idx ) = 0; // -0.5;
+        }
+      DGtal::trace.info() << "- prefactoring matrix M := A'^t A' + a Id" << std::endl;
+      SolverPrimal solver;
+      solver.compute( M );
+      DGtal::trace.info() << "- solving M u = A'^t n + a f" << std::endl;
+      // DualForm0 v = dual_D0.transpose() * n + lambda * f;
+      PrimalForm0 v = primal_AD1 * n + lambda * f;
+      primal_u = solver.solve( v );
+      DGtal::trace.info() << ( solver.isValid() ? "=> OK" : "ERROR" )
+                          << " " << solver.myLinearAlgebraSolver.info() << std::endl;
+      DGtal::trace.endBlock();
       }
 
+
+    /// computes the implicit function (uses PRIMAL to avoid bug !?).
+    void computeImplicitFunctionOnPointels( const Scalar lambda = 0.001 )
+    {
+      DGtal::trace.beginBlock( "Computing DEC" );
+      DGtal::trace.info() << "- add cells" << std::endl;
+      calculus.myKSpace = space();
+      // Compute boundary voxels.
+      std::set<SCell> bdry_voxels;
+      for ( SCell surfel : surface() )
+        {
+          Dimension k  = space().sOrthDir( surfel );
+          Cell   cell2 = space().unsigns( surfel );
+          Cell    vox0 = space().uIncident( cell2, k, true );
+          Cell    vox1 = space().uIncident( cell2, k, false );
+          bdry_voxels.insert( space().sSpel( space().uCoords( vox0 ) ) );
+          bdry_voxels.insert( space().sSpel( space().uCoords( vox1 ) ) );
+        }
+      // Create calculus
+      calculus = CalculusFactory::createFromNSCells<3>( bdry_voxels.begin(),
+                                                        bdry_voxels.end(), true );
+      // Inserts boundary pointels and linels.
+      std::set<Cell> bdry_pointels;
+      // Map unsigned voxel -> input isovalue
+      CellScalarField  isovalue;
+      // Map unsigned voxel -> input normal vector
+      CellVectorField  pointelNormals;
+      // Prepare normals
+      for ( auto it = normals.cbegin(), itE = normals.cend(); it != itE; ++it )
+        {
+          SCell   surfel = it->first;
+          RealVector  Ne = it->second;
+          Dimension    k = space().sOrthDir( surfel );
+          bool    direct = space().sDirect( surfel, k );
+          SCell surf_out = space().sAdjacent( surfel, k, ! direct );
+          SCell surf_ins = space().sAdjacent( surfel, k, direct );
+          // Insert normal for pointels
+          std::vector<Cell> pts = pointels( space().unsigns( surfel ) );
+          for ( Cell p : pts ) {
+            pointelNormals[ p ].add( Ne );
+            isovalue[ p ].add( 0.0 );
+          }
+          std::vector<Cell> pts_out = pointels( space().unsigns( surf_out ) );
+          for ( Cell p : pts_out ) {
+            pointelNormals[ p ].add( Ne );
+            isovalue[ p ].add( -1.0 );
+          }
+          std::vector<Cell> pts_ins = pointels( space().unsigns( surf_ins ) );
+          for ( Cell p : pts_ins ) {
+            pointelNormals[ p ].add( Ne );
+            isovalue[ p ].add( 1.0 );
+          }
+          // bdry_pointels.insert( pts.begin(), pts.end() );
+        }
+      // Put back 0.0
+      for ( auto it = normals.cbegin(), itE = normals.cend(); it != itE; ++it )
+        {
+          SCell   surfel = it->first;
+          // Insert normal for pointels
+          std::vector<Cell> pts = pointels( space().unsigns( surfel ) );
+          for ( Cell p : pts ) isovalue[ p ] = AverageScalar( 0.0 );
+        }
+      //calculus.updateIndexes();
+      DGtal::trace.info() << "- primal_D0" << std::endl;
+      PrimalDerivative0 primal_D0      = calculus.template derivative<0,PRIMAL>();
+      PrimalAntiderivative1 primal_AD1 = calculus.template antiderivative<1,PRIMAL>();
+      PrimalIdentity0   primal_Id0     = calculus.template identity  <0,PRIMAL>();
+      // JOL: The following matrix does not work well
+      // PrimalIdentity0 M = primal_AD1 * primal_D0 + lambda * primal_Id0;
+      // JOL: This one works nicely !
+      PrimalIdentity0   M = primal_D0.transpose() * primal_D0 + lambda * primal_Id0;
+      PrimalVectorField PN( calculus );
+      PrimalForm0       f ( calculus );
+      DGtal::trace.info() << "- primal vector field PN" << std::endl;
+      for ( Index idx = 0; idx < PN.length(); ++idx )
+        {
+          Cell pointel  = space().unsigns( PN.getSCell( idx ) );
+          RealVector vn = pointelNormals[ pointel ].get();
+          PN.setVector( idx, -1.0 * vn );
+          f.myContainer( idx ) = isovalue[ pointel ].get();
+          std::cout << " " << f.myContainer( idx );
+        }
+      DGtal::trace.info() << "- primal 1-form n and primal 0-form f" << std::endl;
+      PrimalForm1 n = calculus.flat( PN );
+      DGtal::trace.info() << "- prefactoring matrix M := A'^t A' + a Id" << std::endl;
+      SolverPrimal solver;
+      solver.compute( M );
+      DGtal::trace.info() << "- solving M u = A'^t n + a f" << std::endl;
+      // PrimalForm0 v = primal_AD1 * n + lambda * f;
+      PrimalForm0 v = primal_D0.transpose() * n + lambda * f;
+      primal_u = solver.solve( v );
+      DGtal::trace.info() << ( solver.isValid() ? "=> OK" : "ERROR" )
+                          << " " << solver.myLinearAlgebraSolver.info() << std::endl;
+      DGtal::trace.endBlock();
+      }
+    
     template <typename GrayLevelImage>
-    void getImplicitFunctionImage( GrayLevelImage& output, int max_value = 255 )
+    void getImplicitFunctionImageDual( GrayLevelImage& output, int max_value = 255 )
     {
       output = GrayLevelImage( bimage.domain() );
       for ( auto p : output.domain() )
         output.setValue( p, bimage( p ) ? max_value : 0 );
-      const Index dual_nb0 = u.myContainer.rows();
-      for ( Index i = 0; i < dual_nb0; i++ )
+      PrimalForm3 u3( calculus );
+      const Index primal_nb3 = u3.myContainer.rows();
+      for ( Index i = 0; i < primal_nb3; i++ )
         {
-          Scalar val = u.myContainer( i );
-          SCell  vox = u.getSCell( i );
-          Point  p   = space().sCoords( vox );
+          SCell  vox = u3.getSCell( i );
+          Point    p = space().sCoords( p );
+          auto   pts = pointels( space().unsigns( vox ) );
+          AverageScalar s;
+          for ( auto pt : pts )
+            {
+              Index idx = calculus.getCellIndex( pt );
+              s.add( primal_u.myContainer( idx ) );
+            }
+          Scalar bdv = std::min( 1.0, std::max( 0.0, s.get() ) ); //cut-off values
+          int    glv = (int) round( bdv * max_value );
+          // std::cout << " " << val;
+          output.setValue( p, glv );
+        }
+    }
+
+    template <typename GrayLevelImage>
+    void getImplicitFunctionImagePrimal( GrayLevelImage& output, int max_value = 255 )
+    {
+      output = GrayLevelImage( bimage.domain() );
+      for ( auto p : output.domain() )
+        output.setValue( p, bimage( p ) ? max_value : 0 );
+      const Index primal_nb0 = primal_u.myContainer.rows();
+      for ( Index i = 0; i < primal_nb0; i++ )
+        {
+          Scalar val = primal_u.myContainer( i );
+          SCell  pointel = primal_u.getSCell( i );
+          Point  p   = space().sCoords( pointel );
           Scalar bdv = std::min( 1.0, std::max( 0.0, val ) ); //cut-off values
           int    glv = (int) round( bdv * max_value );
           // std::cout << " " << val;
           output.setValue( p, glv );
+        }
+    }
+
+    template <typename GrayLevelImage>
+    void getImplicitFunctionImageOnPointels( GrayLevelImage& output, int max_value = 255 )
+    {
+      output = GrayLevelImage( bimage.domain() );
+      for ( auto p : output.domain() )
+        output.setValue( p, bimage( p ) ? max_value : 0 );
+      for ( SCell surfel : surface() )
+        {
+          Dimension k  = space().sOrthDir( surfel );
+          Cell   cell2 = space().unsigns( surfel );
+          Cell    vox0 = space().uIncident( cell2, k, true );
+          Cell    vox1 = space().uIncident( cell2, k, false );
+          std::vector<Cell> pts0 = pointels( vox0 );
+          AverageScalar a0;
+          for ( Cell p0 : pts0 ) {
+            Index idx0 = calculus.getCellIndex( p0 );
+            a0.add( primal_u.myContainer( idx0 ) );
+          }
+          Scalar sa0 = 0.5+0.5*std::min( 1.0, std::max( -1.0, a0.get() ) ); 
+          int   glv0 = (int) round( sa0 * max_value );
+          output.setValue( space().uCoords( vox0 ), glv0 );
+          std::vector<Cell> pts1 = pointels( vox1 );
+          AverageScalar a1;
+          for ( Cell p1 : pts1 ) {
+            Index idx1 = calculus.getCellIndex( p1 );
+            a1.add( primal_u.myContainer( idx1 ) );
+          }
+          Scalar sa1 = 0.5+0.5*std::min( 1.0, std::max( -1.0, a1.get() ) ); 
+          int   glv1 = (int) round( sa1 * max_value );
+          output.setValue( space().uCoords( vox1 ), glv1 );
         }
     }
 
@@ -226,13 +542,15 @@ namespace DGtal {
     Calculus calculus;
     /// The implicit function per voxel
     DualForm0 u;
+    /// The implicit function per voxel
+    PrimalForm0 primal_u;
     /// A reference to the boolean image.
     BooleanImage bimage;
     /// the Khalimsky space
     KSpace       K;
     /// The digital surface corresponding to the boundary of bimage.
     Surface*     ptrSurface;
-    /// Map cell -> input normal vector
+    /// Map surfel -> input normal vector
     VectorField  normals;
   };
 
@@ -258,6 +576,7 @@ int main( int argc, char** argv )
     ("r-radius,r", po::value<double>()->default_value( 3 ), "the constant for parameter r in r(h)=r h^alpha (VCM,II,Trivial)." )
     ("kernel,k", po::value<string>()->default_value( "hat" ), "the function chi_r, either hat or ball." )
     ("alpha", po::value<double>()->default_value( 0.0 ), "the parameter alpha in r(h)=r h^alpha (VCM)." )
+    ("lambda", po::value<double>()->default_value( 0.001 ), "the parameter lambda in the regularisation." )
     ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter t defining the radius for the Trivial estimator. Also used for reorienting the VCM." )
     ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding for VCM estimator: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
     ;
@@ -286,6 +605,7 @@ int main( int argc, char** argv )
   int thresholdMin     = vm["thresholdMin"].as<int>();
   int thresholdMax     = vm["thresholdMax"].as<int>();
   string estimator     = vm["estimator"].as<string>();
+  double        lambda = vm["lambda"].as<double>();
 
   trace.beginBlock( "Reading vol file into an image." );
   typedef KhalimskySpaceND< 3, int >                    KSpace;
@@ -310,11 +630,13 @@ int main( int argc, char** argv )
   rt::chooseKernel( vm, vol.space(), vol.surface(), vol.image(), vol.normals );
   // TODO ...
   trace.beginBlock( "Computing implicit function." );
-  vol.computeImplicitFunction();
+  // vol.computeImplicitFunctionPrimal( lambda );
+  vol.computeImplicitFunctionOnPointels( lambda );
   trace.endBlock();
   trace.beginBlock( "Outputing vol image." );
   GrayLevelImage output( image.domain() );
-  vol.getImplicitFunctionImage( output, 255 );
+  // vol.getImplicitFunctionImagePrimal( output, 255 );
+  vol.getImplicitFunctionImageOnPointels( output, 255 );
   output >> outputFilename;
   trace.endBlock();
   return 0;
