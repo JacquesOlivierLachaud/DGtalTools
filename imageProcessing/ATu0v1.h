@@ -114,9 +114,9 @@ namespace DGtal
     using Base::dual_h2;
 
     typedef typename LinearAlgebra::SolverSimplicialLLT    LinearAlgebraSolver;
-    typedef DiscreteExteriorCalculusSolver<Calculus, LinearAlgebraSolver, 0, PRIMAL, 0, PRIMAL> 
+    typedef DiscreteExteriorCalculusSolver<Calculus, LinearAlgebraSolver, 0, PRIMAL, 0, PRIMAL>
                                                            SolverU;
-    typedef DiscreteExteriorCalculusSolver<Calculus, LinearAlgebraSolver, 1, PRIMAL, 1, PRIMAL> 
+    typedef DiscreteExteriorCalculusSolver<Calculus, LinearAlgebraSolver, 1, PRIMAL, 1, PRIMAL>
                                                            SolverV;
 
     BOOST_STATIC_ASSERT(( KSpace::dimension == 2 ));
@@ -131,10 +131,10 @@ namespace DGtal
 
     /**
     * Default constructor. The object needs to be initialized with \ref init.
-    * @param _verbose specifies the verbose level (0: silent, 1: more info ... ). 
+    * @param _verbose specifies the verbose level (0: silent, 1: more info ... ).
     */
     ATu0v1( int _verbose = 1 );
-    
+
     /**
     * Constructor from Khalimsky space, which specifies the domain of calculus.
     */
@@ -204,7 +204,7 @@ namespace DGtal
     /// have been called.
     void setUFromInput();
 
-    /** 
+    /**
     * Sets the parameter \f$ alpha \f$ as global to the image. Should be
     * set \b before \ref setLambda and \ref setEpsilon.
     *
@@ -214,7 +214,7 @@ namespace DGtal
     */
     void setAlpha( Scalar _alpha );
 
-    /** 
+    /**
     * Sets the parameter \f$ alpha \f$ of the image, as well as a
     * weight for each input data as the primal 0-form m. Should be set
     * \b before \ref setLambda and \ref setEpsilon.
@@ -257,7 +257,7 @@ namespace DGtal
 
     /// Computes the SNR of u wrt ideal input (should have been given @see addInput).
     Scalar computeSNR() const;
-    
+
     /// @return the (global) alpha parameter.
     Scalar getAlpha() const { return alpha; }
 
@@ -286,7 +286,7 @@ namespace DGtal
 
     // ----------------------- Solver --------------------------------------
   public:
-    
+
     /// Computes a solution to function(s) \a u given the input \a g and current \a v.
     /// @return 'true' iff the solver worked.
     bool solveU();
@@ -300,6 +300,10 @@ namespace DGtal
     ///
     /// @return the max of all variations (i.e. delta_v_loo).
     Scalar computeVariation();
+
+    /// Computes the total energy AT.
+    /// @return the total energy AT.
+    Scalar computeEnergy();
 
     /// Checks that form \a v is between 0 and 1 and forces \a v to be in-between.
     /// @return the max of the deviation wrt 0 and 1.
