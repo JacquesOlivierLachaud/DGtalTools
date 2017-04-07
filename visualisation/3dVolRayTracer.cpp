@@ -324,7 +324,12 @@ int main( int argc, char** argv )
       typedef HyperRectDomain< Space3 >                 Domain;
       typedef ImageContainerBySTLVector< Domain, int >  Image;
       typedef GraphicalImplicitDigitalVolume< Image >   Volume;
-      Image image = VolReader<Image>::importVol(inputFilename);
+      Point3i p( 0, 0, 0 );
+      Point3i q( 2, 2, 2 );
+      Domain domain( p, q );
+      Image image( domain );
+      image.setValue( Point3i( 1,1,1 ), 255 );
+      // Image image = VolReader<Image>::importVol(inputFilename);
       trace.endBlock();
       trace.beginBlock( "Making implicit digital volume." );
       Volume* vol = new Volume( image, threshold, string2material( material ) );
