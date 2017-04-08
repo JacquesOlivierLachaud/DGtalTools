@@ -134,7 +134,8 @@ namespace DGtal {
 
       /// returns the closest object intersected by the given ray.
       bool
-      intersectRay( RayIntersection& ray_inter,
+      intersectRay( const Ray& ray,
+                    RayIntersection& ray_inter,
                     GraphicalObject*& object )
       {
         object = 0;
@@ -142,11 +143,12 @@ namespace DGtal {
         RayIntersection ray_inter_tmp( ray_inter );
         for ( GraphicalObject* obj : myObjects )
           {
-            if ( obj->intersectRay( ray_inter_tmp ) )
+            if ( obj->intersectRay( ray, ray_inter_tmp ) )
               {
                 Real new_dist2 = (ray_inter_tmp.intersection
-                                  - ray_inter_tmp.ray.origin).norm();
-                if ( ( object == 0 ) || ( new_dist2 < dist2 ) )
+                                  - ray.origin).dot( ray.direction );
+                if ( new_dist2 > 0.0001
+                     && ( ( object == 0 ) || ( new_dist2 < dist2 ) ) )
                   {
                     object    = obj;
                     ray_inter = ray_inter_tmp;

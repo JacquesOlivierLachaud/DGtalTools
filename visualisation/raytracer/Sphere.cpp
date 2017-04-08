@@ -121,10 +121,9 @@ DGtal::rt::Sphere::getMaterial( Point3 /* p */ )
 }
 
 bool
-DGtal::rt::Sphere::intersectRay( RayIntersection& ray_inter )
+DGtal::rt::Sphere::intersectRay( const Ray& ray, RayIntersection& ray_inter )
 {
   // Calcul de la distance d'intersection
-  const Ray& ray = ray_inter.ray;
   Vector3    pa  = center - ray.origin;
   Real     l_ppa = pa.dot( ray.direction );  // longueur du projete de pa sur dir
   Real        d2 = pa.dot( pa ) - l_ppa * l_ppa; // car |w|=1

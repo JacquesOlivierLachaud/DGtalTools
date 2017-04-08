@@ -73,8 +73,8 @@ namespace DGtal {
 
     public:
       /// Default constructor. Scene is empty.
-      RayTracerViewerExtension() : ptrScene( 0 ), maxDepth( 6 ),
-                                   nbSamples( 10 ), nbCasts( 5 ) {}
+      RayTracerViewerExtension() : ptrScene( 0 ), maxDepth( 0 ),
+                                   nbSamples( 1 ), nbCasts( 1 ) {}
 
       /// Constructor with scene and depth.
       RayTracerViewerExtension( DGtal::rt::Scene& aScene,

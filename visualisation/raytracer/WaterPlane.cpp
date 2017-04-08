@@ -90,9 +90,8 @@ DGtal::rt::WaterPlane::getMaterial( Point3 /* p */ )
 }
 
 bool 
-DGtal::rt::WaterPlane::intersectRay( RayIntersection& ray_inter )
+DGtal::rt::WaterPlane::intersectRay( const Ray& ray, RayIntersection& ray_inter )
 {
-  const Ray& ray = ray_inter.ray;
   Real cos_a     = ray.direction[ 2 ];
   Real dist      = ( ray.origin - center )[ 2 ];
   if ( fabs( cos_a ) < RT_EPSILON ) // vector is tangent

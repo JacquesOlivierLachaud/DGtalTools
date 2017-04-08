@@ -57,9 +57,8 @@ DGtal::rt::PeriodicPlane::coordinates( Point3 p, Real& x, Real& y )
 }
 
 bool 
-DGtal::rt::PeriodicPlane::intersectRay( RayIntersection& ray_inter )
+DGtal::rt::PeriodicPlane::intersectRay( const Ray& ray, RayIntersection& ray_inter )
 {
-  const Ray& ray = ray_inter.ray;
   Real cos_a     = ray.direction.dot( n );
   Real dist      = n.dot( ray.origin - center );
   if ( fabs( cos_a ) < RT_EPSILON ) // vector is tangent

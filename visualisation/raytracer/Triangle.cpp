@@ -45,9 +45,8 @@ DGtal::rt::Triangle::coordinates( Point3 p, Real& x, Real& y )
 }
 
 bool
-DGtal::rt::Triangle::intersectRay( RayIntersection& ray_inter )
+DGtal::rt::Triangle::intersectRay( const Ray& ray, RayIntersection& ray_inter )
 {
-  const Ray& ray = ray_inter.ray;
   Real cos_a     = ray.direction.dot( N );
   Real dist      = N.dot( ray.origin - A );
   if ( fabs( cos_a ) < RT_EPSILON ) // vector is tangent

@@ -133,19 +133,18 @@ namespace DGtal {
       ///
       /// @return true if there was an intersection, false otherwise
       /// (more information is stored in ray_inter)
-      virtual bool intersectRay( RayIntersection& ray_inter )
+      virtual bool intersectRay( const Ray& ray, RayIntersection& ray_inter )
       {
         // Checks first that it intersects the bounding box.
         Point3 p  [ 6 ];
         bool   hit[ 6 ];
-        const Ray& ray = ray_inter.ray;
         int    nb_hit  = 0;
         Real   dist    = 100000000.0;
         Real   alpha   = 0.0;
         unsigned int j = 6;
         for ( unsigned int i = 0; i < 6; i++ )
           {
-            hit[ i ] = sides[ i ].intersectRay( ray_inter );
+            hit[ i ] = sides[ i ].intersectRay( ray, ray_inter );
             Real d   = ray_inter.distance;
             p[ i ]   = ray_inter.intersection;
             dist     = std::min( d, dist );
@@ -220,7 +219,7 @@ namespace DGtal {
                 SCell surfel = K.sIncident( voxel, k, p[ k ] > prev_p[ k ] );
                 // p_intersect = 0.5 * Point3( K.sKCoords( surfel ) );
                 // return -1.0;
-                return intersectSurfel( ray_inter, surfel );
+                return intersectSurfel( ray, ray_inter, surfel );
               }
             prev_p     = p;
             prev_state = state;
@@ -231,7 +230,7 @@ namespace DGtal {
       }
 
 
-      bool intersectSurfel( RayIntersection& ray_inter, SCell surfel )
+      bool intersectSurfel( const Ray& ray, RayIntersection& ray_inter, SCell surfel )
       { 
         Real d = 0.0;
         if ( surfel != last_surfel )
@@ -249,7 +248,7 @@ namespace DGtal {
             last_surfel = surfel;
           }
         Real x,y,a,b;
-        bool intersect = last_square.intersectRay( ray_inter );
+        bool intersect = last_square.intersectRay( ray, ray_inter );
         Point3       p = ray_inter.intersection;
         last_square.coordinates( p, x, y );
         // std::cout << " p=" << p << " x=" << x << " y=" << y << std::endl;
@@ -257,7 +256,7 @@ namespace DGtal {
         y       = std::min( 1.0, std::max( 0.0, y ) );
         a       = 2.0*x-1.0;
         b       = 2.0*y-1.0;
-        interpolatePositionAndNormal( p, last_n, ray_inter.ray, surfel, a, b );
+        interpolatePositionAndNormal( p, last_n, ray, surfel, a, b );
         // last_n  = interpolateNormal( surfel, 2.0*x-1.0, 2.0*y-1.0 );
         // p       = last_square.A + x * last_square.U + y * last_square.V; 
         // p      += last_n / ( 2.0 * last_n.normInfinity() );

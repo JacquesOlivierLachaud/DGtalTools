@@ -44,8 +44,6 @@ namespace DGtal {
 
     /// This structure stores the intersection of a ray with an object.
     struct RayIntersection {
-      /// The incident ray
-      Ray ray;
       /// A real number, <0 if intersection, >0 if not, ==0 if it grazes the object
       Real distance;
       /// Normal at intersection
@@ -61,28 +59,25 @@ namespace DGtal {
       /// Refractive index outside media.
       Real   out_refractive_index;
       
-      /// Default constructor
-      RayIntersection() {}
-
       /// Constructor from parameters.
-      RayIntersection( const Ray& inputRay, Real d = 0.0,
+      RayIntersection( Real d = 0.0,
                        Vector3 N = Vector3(), Point3 i = Point3(),
                        Point3 rx = Point3(), Point3 rc = Point3(),
                        Real in_index = 1.0, Real out_index = 1.0 )
-        : ray( inputRay ), distance( d ), normal( N ),
+        : distance( d ), normal( N ),
           intersection( i ), reflexion( rx ), refraction( rc ),
           in_refractive_index( in_index ), out_refractive_index( out_index )
       {}
 
       /// Builds reflexion ray.
-      Ray reflexionRay() const
+      Ray reflexionRay( const Ray& ray ) const
       {
         return Ray( reflexion, reflect( ray.direction, normal ),
                     ray.depth - 1, ray.refractive_index );
       }
 
       /// Builds refraction ray.
-      Ray refractionRay() const
+      Ray refractionRay( const Ray& ray ) const
       {
         // Snell's law (wikipedia)
         // l : light ray

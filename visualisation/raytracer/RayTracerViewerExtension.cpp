@@ -151,7 +151,7 @@ DGtal::rt::RayTracerViewerExtension::keyPressEvent( Viewer& viewer, QKeyEvent *e
   if (e->key()==Qt::Key_V)
     {
       if ( modifiers == Qt::ShiftModifier )
-        { maxDepth = std::max( 1, maxDepth - 1 ); handled = true; }
+        { maxDepth = std::max( 0, maxDepth - 1 ); handled = true; }
       if ( modifiers == Qt::NoModifier )
         { maxDepth = std::min( 40, maxDepth + 1 ); handled = true; }
       std::cout << "Max depth is " << maxDepth << std::endl; 

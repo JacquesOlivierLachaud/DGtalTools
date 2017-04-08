@@ -255,20 +255,23 @@ namespace DGtal {
 
       /// The rendering routine for one ray.
       /// @return the color for the given ray.
-      RealColor trace( const Ray& ray )
+      RealColor trace( Ray ray )
       {
         assert( ptrScene != 0 );
         RealColor result = RealColor( 0.0, 0.0, 0.0 );
         GraphicalObject* obj_i = 0; // pointer to intersected object
-        RayIntersection  ray_inter( ray );
-        ray_inter.ray.origin += RT_EPSILON * ray_inter.ray.direction;
+        
+        ray.origin += RT_EPSILON * ray.direction;
+        RayIntersection  ray_inter;
         // Look for intersection in this direction.
-        bool intersection = ptrScene->intersectRay( ray_inter, obj_i );
+        std::cout << 'T';
+        bool intersection = ptrScene->intersectRay( ray, ray_inter, obj_i );
         // Nothing was intersected: should be some background color
         if ( ! intersection  ) return background( ray );
-        Material m = obj_i->getMaterial( ray_inter.intersection );
+        Point3  pi = ray_inter.intersection;
+        Material m = obj_i->getMaterial( pi );
         Vector3  N = ray_inter.normal; // obj_i->getNormal  ( p_i );
-        bool out2in = N.dot( ray_inter.ray.direction ) <= 0.0;
+        bool out2in = N.dot( ray.direction ) <= 0.0;
         ray_inter.in_refractive_index =
           out2in ? m.in_refractive_index : m.out_refractive_index;
         ray_inter.out_refractive_index =
@@ -276,38 +279,40 @@ namespace DGtal {
         if ( ( ray.depth > 0 ) && ( m.coef_reflexion > 0.0 ) )
           {
             // RealColor C_refl = trace( reflexionRay( ray, p_i, N ) );
-            RealColor C_refl = trace( ray_inter.reflexionRay() );
+            RealColor C_refl = trace( ray_inter.reflexionRay( ray ) );
             result      += ( C_refl * m.specular ) * m.coef_reflexion;
           }
         if ( ( ray.depth > 0 ) && ( m.coef_refraction > 0.0 ) )
           {
             // RealColor C_refr = trace( refractionRay( ray, p_i, N, m ) );
             // JOL: TODO, set refractive indices in ray_inter
-            RealColor C_refr = trace( ray_inter.refractionRay() );
+            RealColor C_refr = trace( ray_inter.refractionRay( ray ) );
             result      += ( C_refr * m.diffuse ) * m.coef_refraction;
           }
         result += ( ( ray.depth > 0 ) ? m.coef_diffusion : 1.0 )
-          * illumination( ray, m, N, ray_inter.intersection );
+          * illumination( ray, m, N, pi );
         return result + m.ambient;
       }
 
       /// The rendering routine for one ray.
       /// @return the color for the given ray.
-      RealColor traceWithAccumulation( const Ray& ray, Real accumulation )
+      RealColor traceWithAccumulation( Ray ray, Real accumulation )
       {
         assert( ptrScene != 0 );
         RealColor result = RealColor( 0.0, 0.0, 0.0 );
         if ( accumulation < 0.003 ) return result;
         GraphicalObject* obj_i = 0; // pointer to intersected object
-        RayIntersection  ray_inter( ray );
-        ray_inter.ray.origin += RT_EPSILON * ray_inter.ray.direction;
+        ray.origin += RT_EPSILON * ray.direction;
+        RayIntersection  ray_inter;
         // Look for intersection in this direction.
-        bool intersection = ptrScene->intersectRay( ray_inter, obj_i );
+        std::cout << 'A';
+        bool intersection = ptrScene->intersectRay( ray, ray_inter, obj_i );
         // Nothing was intersected: should be some background color
         if ( ! intersection  ) return accumulation * background( ray );
-        Material m = obj_i->getMaterial( ray_inter.intersection );
+        Point3  pi = ray_inter.intersection;
+        Material m = obj_i->getMaterial( pi );
         Vector3  N = ray_inter.normal; // obj_i->getNormal  ( p_i );
-        bool out2in = N.dot( ray_inter.ray.direction ) <= 0.0;
+        bool out2in = N.dot( ray.direction ) <= 0.0;
         ray_inter.in_refractive_index =
           out2in ? m.in_refractive_index : m.out_refractive_index;
         ray_inter.out_refractive_index =
@@ -316,7 +321,7 @@ namespace DGtal {
           {
             // RealColor C_refl = trace( reflexionRay( ray, p_i, N ) );
             RealColor C_refl =
-              traceWithAccumulation( ray_inter.reflexionRay(),
+              traceWithAccumulation( ray_inter.reflexionRay( ray ),
                                      accumulation * m.coef_reflexion );
             result      += ( C_refl * m.specular );
           }
@@ -325,33 +330,35 @@ namespace DGtal {
             // RealColor C_refr = trace( refractionRay( ray, p_i, N, m ) );
             // JOL: TODO, set refractive indices in ray_inter
             RealColor C_refr =
-              traceWithAccumulation( ray_inter.refractionRay(),
+              traceWithAccumulation( ray_inter.refractionRay( ray ),
                                      accumulation * m.coef_refraction );
             result      += ( C_refr * m.diffuse );
           }
         result += accumulation * ( ( ray.depth > 0 ) ? m.coef_diffusion : 1.0 )
-          * ( illumination( ray, m, N, ray_inter.intersection ) + m.ambient);
+          * ( illumination( ray, m, N, pi ) + m.ambient);
         return result;
       }
 
       /// The rendering routine for one ray.
       /// @return the color for the given ray.
-      RealColor randomTrace( const Ray& ray )
+      RealColor randomTrace( Ray ray )
       {
         assert( ptrScene != 0 );
         RealColor result = RealColor( 0.0, 0.0, 0.0 );
         GraphicalObject* obj_i = 0; // pointer to intersected object
-        RayIntersection  ray_inter( ray );
-        ray_inter.ray.origin += RT_EPSILON * ray_inter.ray.direction;
+        ray.origin += RT_EPSILON * ray.direction;
+        RayIntersection  ray_inter;
         // Look for intersection in this direction.
-        bool intersection = ptrScene->intersectRay( ray_inter, obj_i );
+        std::cout << 'R';
+        bool intersection = ptrScene->intersectRay( ray, ray_inter, obj_i );
         // Nothing was intersected: should be some background color
         if ( ! intersection  ) return background( ray );
 
         // Compute material and normal at intersection.
-        Material m = obj_i->getMaterial( ray_inter.intersection );
+        Point3  pi = ray_inter.intersection;
+        Material m = obj_i->getMaterial( pi );
         Vector3  N = ray_inter.normal; // obj_i->getNormal  ( p_i );
-        bool out2in = N.dot( ray_inter.ray.direction ) <= 0.0;
+        bool out2in = N.dot( ray.direction ) <= 0.0;
         ray_inter.in_refractive_index =
           out2in ? m.in_refractive_index : m.out_refractive_index;
         ray_inter.out_refractive_index =
@@ -363,16 +370,16 @@ namespace DGtal {
         Real     p = ray.depth > 0 ? rand01()*c : 0.0f;
         if ( p <= m.coef_diffusion )
           { // Diffusion + ambient
-            return m.ambient + c*illumination( ray, m, N, ray_inter.intersection );
+            return m.ambient + c*illumination( ray, m, N, pi );
           }
         else if ( p <= m.coef_diffusion + m.coef_reflexion )
           { // réflexion
-            RealColor C_refl = randomTrace( ray_inter.reflexionRay() );
+            RealColor C_refl = randomTrace( ray_inter.reflexionRay( ray ) );
             return (c*C_refl) * m.specular;
           }
         else 
           { // réfraction
-            RealColor C_refr = randomTrace( ray_inter.refractionRay() );
+            RealColor C_refr = randomTrace( ray_inter.refractionRay( ray ) );
             return (c*C_refr) * m.diffuse;
           }
       }
@@ -416,8 +423,9 @@ namespace DGtal {
         while ( light_color.max() > 0.003 )
           {
             Ray shadow_ray( moving_p + RT_EPSILON*ray.direction, ray.direction );
-            RayIntersection shadow_ray_inter( shadow_ray );
-            bool intersection = ptrScene->intersectRay( shadow_ray_inter, shadow_obj );
+            RayIntersection shadow_ray_inter;
+            std::cout << 'I';
+            bool intersection = ptrScene->intersectRay( ray, shadow_ray_inter, shadow_obj );
             if ( ! intersection ) break; // found no intersection.
             // Checks if the intersected material was transparent
             Material shadow_m = shadow_obj->getMaterial( shadow_ray_inter.intersection );

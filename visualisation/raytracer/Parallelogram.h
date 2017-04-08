@@ -98,7 +98,7 @@ namespace DGtal {
       ///
       /// @return true if there was an intersection, false otherwise
       /// (more information is stored in ray_inter)
-      virtual bool intersectRay( RayIntersection& ray_inter );
+      virtual bool intersectRay( const Ray& ray, RayIntersection& ray_inter );
 
     };
 

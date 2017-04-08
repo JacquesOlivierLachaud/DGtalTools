@@ -325,10 +325,17 @@ int main( int argc, char** argv )
       typedef ImageContainerBySTLVector< Domain, int >  Image;
       typedef GraphicalImplicitDigitalVolume< Image >   Volume;
       Point3i p( 0, 0, 0 );
-      Point3i q( 2, 2, 2 );
+      Point3i q( 3, 3, 3 );
       Domain domain( p, q );
       Image image( domain );
       image.setValue( Point3i( 1,1,1 ), 255 );
+      image.setValue( Point3i( 1,1,2 ), 255 );
+      image.setValue( Point3i( 1,2,1 ), 255 );
+      image.setValue( Point3i( 1,2,2 ), 255 );
+      image.setValue( Point3i( 2,1,1 ), 255 );
+      image.setValue( Point3i( 2,1,2 ), 255 );
+      image.setValue( Point3i( 2,2,1 ), 255 );
+      image.setValue( Point3i( 2,2,2 ), 255 );
       // Image image = VolReader<Image>::importVol(inputFilename);
       trace.endBlock();
       trace.beginBlock( "Making implicit digital volume." );
