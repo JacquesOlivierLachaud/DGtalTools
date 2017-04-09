@@ -73,13 +73,14 @@ namespace DGtal {
       typedef HyperRectDomain<Space>                Domain;
       typedef ImplicitPolynomial3Shape<Space>       PolynomialShape;              
       typedef typename PolynomialShape::Polynomial3 Polynomial;
-      
+      typedef std::map<Point,Polynomial>            PolynomialStore;
       BOOST_STATIC_ASSERT(( KSpace::dimension == 3 ));
 
       
       inline
       ImplicitDigitalVolume( Clone<TImage> anImage, Value threshold )
         : myImage( anImage ), myThresholdedImage( myImage, threshold ),
+          myCfgImage( myImage.domain() ),
           myT( threshold ), ptrSurface( 0 )
       {
         // // We need to extend the domain since we are not considering voxels, but 8-cubes.
@@ -89,8 +90,8 @@ namespace DGtal {
                 myImage.domain().upperBound(), true );
         Point3i lo   = K.uCoords( K.lowerCell() ); 
         Point3i hi   = K.uCoords( K.upperCell() );
-        Point3 A000 = Point3( lo ) - Point3::diagonal( 0.5 );
-        Point3 A111 = Point3( hi ) - Point3::diagonal( 0.5 );
+        Point3 A000 = Point3( lo ); // - Point3::diagonal( 0.5 );
+        Point3 A111 = Point3( hi ); // - Point3::diagonal( 0.5 );
         Point3 A100( A111[ 0 ], A000[ 1 ], A000[ 2 ] );
         Point3 A010( A000[ 0 ], A111[ 1 ], A000[ 2 ] );
         Point3 A001( A000[ 0 ], A000[ 1 ], A111[ 2 ] );
@@ -122,6 +123,9 @@ namespace DGtal {
               *      X[ (i & 4) ? 1 : 0 ][ 2 ];
             std::cout << "P[ " << i << " ] = " << P[ i ] << std::endl;
           }
+        auto it = myCfgImage.begin();
+        for ( auto p : myImage.domain() )
+          *it++ = getConfiguration( p );
       }
     
       /// Virtual destructor since object contains virtual methods.
@@ -191,22 +195,27 @@ namespace DGtal {
         // return -1.0;
 
         // (0) Checks if origin is in the volume
-        Point3i origin ( (Integer) round( ray.origin[ 0 ] ),
-                         (Integer) round( ray.origin[ 1 ] ),
-                         (Integer) round( ray.origin[ 2 ] ) );
+        Point3  s_origin = ray.origin + 0.0001* ray.direction;
+        Point3i origin ( (Integer) floor( s_origin[ 0 ] ),
+                         (Integer) floor( s_origin[ 1 ] ),
+                         (Integer) floor( s_origin[ 2 ] ) );
         bool origin_in = myImage.domain().isInside( origin );
-        Point3  q      = origin_in ? ray.origin : p[ j ];
+        Point3  q      = origin_in ? s_origin : ( p[ j ] + 0.001* ray.direction );
         // trace.info() << "Inside: q=" << q << std::endl;
         // Now casts the ray in the volume
         // (1) build a digital ray
-        Ray ray2( q, ray.direction, ray.depth ); //p[ j ]
+        Point3 shift_origin = q - Point3(0.5,0.5,0.5);
+        Ray ray2( shift_origin,
+                  ray.direction, ray.depth ); //p[ j ]
         StandardDSL3d D( ray2,
-                         RT_PRECISION*( K.upperBound() - K.lowerBound() ).norm1() );
+                         10*RT_PRECISION*( K.upperBound() - K.lowerBound() ).norm1() );
         // (2) sort points along ray
-        // Point3i origin = D.getPoint( ray.origin + RT_BANDWIDTH * ray.direction );  // 0.5*delta );
-        Point3i first  = origin_in ? origin : D.getPoint( p[ j ]+0.001* ray.direction );
+        Point3i first  = origin_in
+          ? origin
+          : Point3i( (Integer) floor( q[ 0 ] ),
+                     (Integer) floor( q[ 1 ] ),
+                     (Integer) floor( q[ 2 ] ) );
         StandardDSL3d::ConstIterator it  = D.begin( first );
-        // std::cout << "- beg=" << *it << " end=" << *itE << std::endl;
         if ( ! D.isInDSL( *it  ) )
           {
             trace.warning() << " *it=" << *it << " not inside"
@@ -216,7 +225,7 @@ namespace DGtal {
             return false;
           }
         if ( ! myImage.domain().isInside( *it  ) ) return false;
-        //   it++;
+        if ( origin_in )   it++;
         // std::cout << "- DSL:";
         while ( true )
           {
@@ -226,19 +235,20 @@ namespace DGtal {
             if ( ! myImage.domain().isInside( *it  ) )
               break;
             // Get configuration
-            int cfg = getConfiguration( p );
+            int cfg = myCfgImage( p ); // getConfiguration( p );
             if ( cfg > 0 && cfg < 255 ) // intersection possible
               {
-                std::cout << " *";
+                // std::cout << " *";
                 if ( intersect8Cube( ray, ray_inter, p ) )
                   {
-                    Scalar proj  = ( ray_inter.intersection - ray.origin )
+                    Scalar proj  =
+                      ( ray_inter.intersection - ray.origin )
                       .dot( ray.direction );
                     const Point3& xi = ray_inter.intersection;
-                    std::cout << "(pi=" << proj << ")"
-                              << "/(" << xi[0]<< "," << xi[1] << "," << xi[2] << ")"
-                              << std::endl;
-                    if ( proj > 0.5 )
+                    // std::cout << "(pi=" << proj << ")"
+                    //           << "/(" << xi[0]<< "," << xi[1] << "," << xi[2] << ")"
+                    //           << std::endl;
+                    if ( proj > 0.01 )
                       return true;
                   }
               }
@@ -262,33 +272,49 @@ namespace DGtal {
         return cfg;
       }
 
-      bool intersect8Cube( const Ray& ray, RayIntersection& ray_inter, Point3i base )
+      // Computes and memorizes polynomial for the given base.
+      void getPolynomial( Polynomial& bP, const Point3i& base )
       {
-        // Make the local polynomial isosurface
-        Polynomial L;
         if ( base == last_base )
-          L = last_poly;
+          {
+            bP = last_poly;
+            return;
+          }
+        auto it = poly_mem.find( base );
+        if ( it != poly_mem.end() )
+          {
+            bP = last_poly = it->second;
+          }
         else
           {
+            Polynomial& L = poly_mem[ base ];
             for ( Dimension l = 0; l < 8; l++ )
               {
                 Point3i voxel( base[ 0 ] + ( (l & 1) ? 1 : 0 ),
                                base[ 1 ] + ( (l & 2) ? 1 : 0 ),
                                base[ 2 ] + ( (l & 4) ? 1 : 0 ) );
                 Value v = myImage.domain().isInside( voxel ) ? myImage( voxel ) : 0;
-                // std::cout << "voxel=" << voxel << " v=" << (Scalar) v << " L=" << L << std::endl;
+                // std::cout << " v=" << (Scalar) v << endl;
                 L      += ( ( (Scalar) v - (Scalar) myT ) / 256.0 ) * P[ l ];
               }
-            last_base = base;
-            last_poly = L;
+            bP = last_poly = L;
+            // std::cout << "base=" << base << " L=" << L << endl;
           }
+        last_base = base;
+      }
+      
+      bool intersect8Cube( const Ray& ray, RayIntersection& ray_inter, Point3i base )
+      {
+        // Make the local polynomial isosurface
+        Polynomial L;
+        getPolynomial( L, base );
         PolynomialShape PS( L );
         // std::cout << " PS=" << PS << std::endl;
         // Checks for intersection along ray
         const Point3     p = Point3( 0.5, 0.5, 0.5 );
         // Project onto ray.
         ray_inter.distance = 1.0;
-        const Point3&    o = p + ray.origin;
+        const Point3&    o = ray.origin; // p + ray.origin;
         const Vector3&   u = ray.direction;
         Point3  B = Point3( base[ 0 ], base[ 1 ], base[ 2 ] );
         Point3 rO = o - B;
@@ -296,110 +322,25 @@ namespace DGtal {
         bool found = false;
         found = intersectPolynomialShapeE( PS, u, q );
         if ( ! found ) return false;
+        // if ( ! ( fabs( PS( q ) ) < 0.005 ) ) return false;
+        if ( ( q[ 0 ] < -0.001 ) || ( q[ 0 ] > 1.001 )
+             || ( q[ 1 ] < -0.001 ) || ( q[ 1 ] > 1.001 )
+             || ( q[ 2 ] < -0.001 ) || ( q[ 2 ] > 1.001 ) ) return false;
         last_n     = -PS.gradient( q );
         if ( last_n == Vector3::zero ) return false;
-        if ( ( q[ 0 ] < -0.0001 ) || ( q[ 0 ] > 1.0001 )
-             || ( q[ 1 ] < -0.0001 ) || ( q[ 1 ] > 1.0001 )
-             || ( q[ 2 ] < -0.0001 ) || ( q[ 2 ] > 1.0001 ) ) 
-          {
-            // trace.info() << "Outside at " << q << " P(q)=" << PS( q ) << std::endl;
-            return false;
-          }
         last_n    /= last_n.norm();
         // std::cout << "- base=" << base << " P=" << L << std::endl;
         // std::cout << "  => found q=" << q << " n=" << last_n << " pi=" << (q + B) << std::endl;
-        q         += B + p;
+        q         += B + Point3::diagonal(0.5); // + p; // B - p;
         last_p     = q;
         ray_inter.normal       = last_n;
-        ray_inter.intersection = q + 0.01*last_n;
-        ray_inter.reflexion    = q + 0.01*last_n;
-        ray_inter.refraction   = q;// - 0.1*last_n;
+        ray_inter.intersection = q; // + 0.001*last_n;
+        ray_inter.reflexion    = q + 0.001*last_n; // ray_inter.intersection;
+        ray_inter.refraction   = q - 0.001*last_n;
         ray_inter.distance     = -1.0;
         return true;
       }
 
-      bool intersectSurfel( const Ray& ray, RayIntersection& ray_inter, SCell surfel )
-      { 
-        Dimension k = K.sOrthDir( surfel );
-        Dimension i = (k+1)%3;
-        Dimension j = (k+2)%3;
-        if ( surfel != last_surfel )
-          {
-            // Build parallelogram
-            Cell      c = K.unsigns( surfel );
-            Point3    A = Point3( K.uCoords( c ) ) - Point3::diagonal( 0.5 );
-            Point3    B = A; B[ i ] += 1.0; // + 2.0*RT_BANDWIDTH;
-            Point3    C = A; C[ j ] += 1.0; // + 2.0*RT_BANDWIDTH;
-            last_square = Parallelogram( A, B, C );
-            last_surfel = surfel;
-          }
-        Real x,y,a,b;
-        bool intersect = last_square.intersectRay( ray, ray_inter );
-        Point3       p = ray_inter.intersection;
-        last_square.coordinates( p, x, y );
-        // std::cout << " p=" << p << " x=" << x << " y=" << y << std::endl;
-        x           = std::min( 1.0, std::max( 0.0, x ) );
-        y           = std::min( 1.0, std::max( 0.0, y ) );
-        a           = 2.0*x-1.0;
-        b           = 2.0*y-1.0;
-        // We build the correct 8-cube around the surfel
-        Point3i base = K.sCoords( surfel );
-        base[ k ]   -= 1;
-        base[ i ]   -= a >= 0.0 ? 0 : 1;
-        base[ j ]   -= b >= 0.0 ? 0 : 1;
-        // Make the local polynomial isosurface
-        Polynomial L;
-        if ( base == last_base )
-          L = last_poly;
-        else
-          {
-            for ( Dimension l = 0; l < 8; l++ )
-              {
-                Point3i voxel( base[ 0 ] + ( (l & 1) ? 1 : 0 ),
-                               base[ 1 ] + ( (l & 2) ? 1 : 0 ),
-                               base[ 2 ] + ( (l & 4) ? 1 : 0 ) );
-                Value v = myImage.domain().isInside( voxel ) ? myImage( voxel ) : 0;
-                // std::cout << "voxel=" << voxel << " v=" << (Scalar) v << " L=" << L << std::endl;
-                L      += ( ( (Scalar) v - (Scalar) myT ) / 256.0 ) * P[ l ];
-              }
-            last_base = base;
-            last_poly = L;
-            std::cout << "- base=" << base << " P=" << L << std::endl;
-          }
-        PolynomialShape PS( L );
-        // std::cout << " PS=" << PS << std::endl;
-        // Checks for intersection along ray
-        Point3 B   = Point3( base[ 0 ], base[ 1 ], base[ 2 ] );
-        Point3 q   = p - B;
-        if ( ( q[ 0 ] < 0.0 ) || ( q[ 0 ] > 1.0 )
-             || ( q[ 1 ] < 0.0 ) || ( q[ 1 ] > 1.0 )
-             || ( q[ 2 ] < 0.0 ) || ( q[ 2 ] > 1.0 ) ) 
-          trace.info() << "Outside at " << q << " p=" << p << " B=" << B << std::endl;
-        ray_inter.distance     = 1.0;
-        const Vector3& u = ray.direction;
-        bool found = false;
-        found = intersectPolynomialShape( PS, u, q );
-        if ( ! found ) return false;
-        last_n     = -PS.gradient( q );
-        if ( last_n == Vector3::zero ) return false;
-        if ( ( q[ 0 ] < 0.0 ) || ( q[ 0 ] > 1.0 )
-             || ( q[ 1 ] < 0.0 ) || ( q[ 1 ] > 1.0 )
-             || ( q[ 2 ] < 0.0 ) || ( q[ 2 ] > 1.0 ) ) 
-          {
-            trace.info() << "Outside at " << q << " P(q)=" << PS( q ) << std::endl;
-            return false;
-          }
-        last_n    /= last_n.norm();
-        std::cout << "  => found q=" << q << " n=" << last_n << " pi=" << (q + B) << std::endl;
-        q         += B;
-        last_p     = q;
-        ray_inter.normal       = last_n;
-        ray_inter.intersection = q + 0.01*last_n;
-        ray_inter.reflexion    = q + 0.01*last_n;
-        ray_inter.refraction   = q - 0.01*last_n;
-        ray_inter.distance     = -1.0;
-        return true;
-      }
 
       bool intersectPolynomialShapeE( const PolynomialShape& PS, const Vector3& u,
                                       Point3& q )
@@ -424,7 +365,7 @@ namespace DGtal {
             if ( min <= 0.0 && max > 0.0 )
               {
                 bool ok = intersectPolynomialShapeDicho( PS, q0, q1 );
-                q = 0.5*(q0+q1);
+                q = q0;
                 return ok;
               }
           }
@@ -434,14 +375,18 @@ namespace DGtal {
       bool intersectPolynomialShapeDicho( const PolynomialShape& PS,
                                           Point3& q0, Point3& q1 )
       {
-        const int   iter = 8;
-        for ( int n = 0; n < 8; n++ )
+        const Scalar eps = 0.0025;
+        const int   iter = 12;
+        for ( int n = 0; n < iter; n++ )
           {
             Point3 qm = 0.5*(q0+q1);
-            if ( PS( qm ) > 0.0 ) q1 = qm;
-            else                  q0 = qm;
+            Scalar  v = PS( qm );
+            if ( fabs( v ) < eps ) { q0 = qm; return true; }
+            if ( v > 0.0 ) q1 = qm;
+            else           q0 = qm;
           }
-        return true;
+        Scalar  v = PS( q0 );
+        return ( fabs( v ) < eps );
       }
 
       bool intersectPolynomialShapeR( const PolynomialShape& PS, const Vector3& u,
@@ -473,7 +418,7 @@ namespace DGtal {
       {
         const int   iter = 10;
         const Scalar att = 0.5;
-        const Scalar eps = 0.1;
+        const Scalar eps = 0.01;
         Scalar      diff = PS( q );
         for ( int n = 0; n < iter; n++ )
           {
@@ -499,6 +444,8 @@ namespace DGtal {
       Image            myImage;
       /// The thresholded image.
       ThresholdedImage myThresholdedImage;
+      /// The configuration image.
+      Image            myCfgImage;
       /// The threshold
       Value            myT;
       /// the Khalimsky space
@@ -516,9 +463,10 @@ namespace DGtal {
       /// Last surfel at intersection
       SCell         last_surfel;
       /// Last parallelogram at intersection
-      Parallelogram last_square;
-      Point3i       last_base;
-      Polynomial    last_poly;
+      Parallelogram   last_square;
+      Point3i         last_base;
+      Polynomial      last_poly;
+      PolynomialStore poly_mem;
     };
 
   } // namespace rt

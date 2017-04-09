@@ -264,7 +264,7 @@ namespace DGtal {
         ray.origin += RT_EPSILON * ray.direction;
         RayIntersection  ray_inter;
         // Look for intersection in this direction.
-        std::cout << 'T';
+        //std::cout << 'T';
         bool intersection = ptrScene->intersectRay( ray, ray_inter, obj_i );
         // Nothing was intersected: should be some background color
         if ( ! intersection  ) return background( ray );
@@ -305,7 +305,7 @@ namespace DGtal {
         ray.origin += RT_EPSILON * ray.direction;
         RayIntersection  ray_inter;
         // Look for intersection in this direction.
-        std::cout << 'A';
+        //std::cout << 'A';
         bool intersection = ptrScene->intersectRay( ray, ray_inter, obj_i );
         // Nothing was intersected: should be some background color
         if ( ! intersection  ) return accumulation * background( ray );
@@ -349,7 +349,7 @@ namespace DGtal {
         ray.origin += RT_EPSILON * ray.direction;
         RayIntersection  ray_inter;
         // Look for intersection in this direction.
-        std::cout << 'R';
+        // std::cout << 'R';
         bool intersection = ptrScene->intersectRay( ray, ray_inter, obj_i );
         // Nothing was intersected: should be some background color
         if ( ! intersection  ) return background( ray );
@@ -424,7 +424,7 @@ namespace DGtal {
           {
             Ray shadow_ray( moving_p + RT_EPSILON*ray.direction, ray.direction );
             RayIntersection shadow_ray_inter;
-            std::cout << 'I';
+            // std::cout << 'I';
             bool intersection = ptrScene->intersectRay( ray, shadow_ray_inter, shadow_obj );
             if ( ! intersection ) break; // found no intersection.
             // Checks if the intersected material was transparent
