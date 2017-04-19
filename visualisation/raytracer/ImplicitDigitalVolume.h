@@ -208,7 +208,7 @@ namespace DGtal {
         Ray ray2( shift_origin,
                   ray.direction, ray.depth ); //p[ j ]
         StandardDSL3d D( ray2,
-                         10*RT_PRECISION*( K.upperBound() - K.lowerBound() ).norm1() );
+                         RT_PRECISION*( K.upperBound() - K.lowerBound() ).norm1() );
         // (2) sort points along ray
         Point3i first  = origin_in
           ? origin
@@ -320,7 +320,7 @@ namespace DGtal {
         Point3 rO = o - B;
         Point3 q  = rO + (p - rO).dot( u ) * u;
         bool found = false;
-        found = intersectPolynomialShapeE( PS, u, q );
+        found = intersectPolynomialShape( PS, u, q );
         if ( ! found ) return false;
         // if ( ! ( fabs( PS( q ) ) < 0.005 ) ) return false;
         if ( ( q[ 0 ] < -0.001 ) || ( q[ 0 ] > 1.001 )
@@ -416,26 +416,23 @@ namespace DGtal {
       bool intersectPolynomialShape( const PolynomialShape& PS, const Vector3& u,
                                      Point3& q )
       {
-        const int   iter = 10;
-        const Scalar att = 0.5;
-        const Scalar eps = 0.01;
-        Scalar      diff = PS( q );
+        const int   iter = 12;
+        //const Scalar att = 0.5;
+        const Scalar eps = 0.0025;
+        Scalar      val = PS( q );
         for ( int n = 0; n < iter; n++ )
           {
-            if ( fabs( diff ) <= eps ) return true;
+            if ( fabs( val ) <= eps ) return true;
             Vector3  g = PS.gradient( q );
-            Scalar dgu = att * g.dot( g ) / g.dot( u );
-            if ( dgu > 0.5 ) dgu = 0.5;
-            else if ( dgu < -0.5 ) dgu = -0.5;
-            if ( diff > 0.0 )
-              q       += dgu * u;
-            else
-              q       -= dgu * u;
-            if ( q.normInfinity() > 10.0 ) return false;
-            diff       = PS( q );
-            // std::cout << "PS(q)=" << diff << std::endl;
+	    Scalar  ng = g.norm();
+	    if ( ng < 0.00001 ) return false;
+            Scalar   t = - val * ng / g.dot( u );
+	    q         += t * u;
+            if ( q.normInfinity() > 1.5 ) return false;
+            val        = PS( q );
+            // std::cout << "PS(q)=" << val << std::endl;
           }
-        return ( fabs( diff ) <= eps );
+        return ( fabs( val ) <= eps );
       }
       
       // ----------------------------------------------------------------------

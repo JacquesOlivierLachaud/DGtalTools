@@ -78,9 +78,9 @@ namespace DGtal {
 
       /// Constructor with scene and depth.
       RayTracerViewerExtension( DGtal::rt::Scene& aScene,
-                                int depth = 6 )
+                                int depth = 0 )
         : ptrScene( &aScene ), maxDepth( depth ),
-          nbSamples( 10 ), nbCasts( 5 ) {}
+          nbSamples( 1 ), nbCasts( 1 ) {}
       
 
       static Point3 toPoint3( const qglviewer::Vec& v )
