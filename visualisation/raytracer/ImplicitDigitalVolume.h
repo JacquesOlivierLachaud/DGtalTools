@@ -74,13 +74,14 @@ namespace DGtal {
       typedef ImplicitPolynomial3Shape<Space>       PolynomialShape;              
       typedef typename PolynomialShape::Polynomial3 Polynomial;
       typedef std::map<Point,Polynomial>            PolynomialStore;
+      typedef ImageContainerBySTLVector<Domain, Vector3> VectorImage;
       BOOST_STATIC_ASSERT(( KSpace::dimension == 3 ));
 
       
       inline
       ImplicitDigitalVolume( Clone<TImage> anImage, Value threshold )
         : myImage( anImage ), myThresholdedImage( myImage, threshold ),
-          myCfgImage( myImage.domain() ),
+          myCfgImage( myImage.domain() ), myGradientImage( myImage.domain() ),
           myT( threshold ), ptrSurface( 0 )
       {
         // // We need to extend the domain since we are not considering voxels, but 8-cubes.
@@ -104,10 +105,12 @@ namespace DGtal {
         sides.push_back( Parallelogram( A111, A011, A101 ) ); // top    (xy1)
         sides.push_back( Parallelogram( A111, A101, A110 ) ); // right  (1yz)
         sides.push_back( Parallelogram( A111, A110, A011 ) ); // back   (x1z)
+	trace.beginBlock( "Compute boundary" );
         SCellSet boundary;
         Surfaces<KSpace3>::sMakeBoundary( boundary, K, myThresholdedImage,
                                           K.lowerBound(), K.upperBound() );
         ptrSurface = new Surface( new SurfaceStorage( K, true, boundary ) );
+	trace.endBlock();
         // interpolateVectorField( trivialNormals, true );
         // Init polynomials
         Polynomial X[ 2 ][ 3 ];
@@ -121,21 +124,92 @@ namespace DGtal {
             P[ i ] = X[ (i & 1) ? 1 : 0 ][ 0 ]
               *      X[ (i & 2) ? 1 : 0 ][ 1 ]
               *      X[ (i & 4) ? 1 : 0 ][ 2 ];
-            std::cout << "P[ " << i << " ] = " << P[ i ] << std::endl;
+            //std::cout << "P[ " << i << " ] = " << P[ i ] << std::endl;
           }
+	trace.beginBlock( "Compute gradients" );
         auto it = myCfgImage.begin();
         for ( auto p : myImage.domain() )
-          *it++ = getConfiguration( p );
+	  {
+	    *it++ = getConfiguration( p );
+	    Vector3   g = computeGradientAtVoxel( p );
+	    myGradientImage.setValue( p,  g );
+	    //std::cout << "At p=" << p << " g=" << g << std::endl;
+	  }
+	for ( auto surfel : surface() )
+	  {
+	    Dimension k = space().sOrthDir( surfel );
+	    Point3i  p0 = space().sCoords( space().sIncident( surfel, k, false ) );
+	    Point3i  p1 = p0 + Point3i::base( k );
+	    Vector3   g = computeGradientAtSurfel( surfel );
+	    myGradientImage.setValue( p0,  g );
+	    myGradientImage.setValue( p1,  g );
+	    //std::cout << "At surfel=" << surfel << " g=" << g << std::endl;
+	  }
+	trace.endBlock();
       }
     
       /// Virtual destructor since object contains virtual methods.
       ~ImplicitDigitalVolume() {}
 
       
-      Image&            image()   { return myImage; }
+      Image&            image()         { return myImage; }
       ThresholdedImage& thresholdedImage()   { return myThresholdedImage; }
-      KSpace3&          space()   { return K; }
-      const Surface&    surface() { return *ptrSurface; }
+      KSpace3&          space()         { return K; }
+      const KSpace3&    space() const   { return K; }
+      Surface&          surface()       { return *ptrSurface; }
+      const Surface&    surface() const { return *ptrSurface; }
+
+      /// Secured accessor to voxel value.
+      Value at( Point3i voxel ) const
+      { return myImage.domain().isInside( voxel ) ? myImage( voxel ) : 0; }
+
+      /// @return the gradient at the given surfel.
+      Vector3 computeGradientAtSurfel( const SCell& surfel ) const
+      {
+	Vector3 grad;
+	Dimension k = space().sOrthDir( surfel );
+	Point3i  p0 = space().sCoords( space().sIncident( surfel, k, false ) );
+	Point3i  p1 = p0 + Point3i::base( k );
+	Dimension i = (k+1)%3;
+	Dimension j = (k+2)%3;
+	grad[ k ]   = (Scalar) at( p1 ) - (Scalar) at( p0 );
+	grad[ i ]   =
+	  0.25*( (Scalar) at( p0 + Point3i::base( i ) ) - (Scalar) at( p0 - Point3i::base( i ) )
+		 + (Scalar) at( p1 + Point3i::base( i ) ) - (Scalar) at( p1 - Point3i::base( i ) ) );
+	grad[ j ]   =
+	  0.25*( (Scalar) at( p0 + Point3i::base( j ) ) - (Scalar) at( p0 - Point3i::base( j ) )
+		 + (Scalar) at( p1 + Point3i::base( j ) ) - (Scalar) at( p1 - Point3i::base( j ) ) );
+	return grad != Point3::zero ? grad.getNormalized() : grad;
+      }
+
+      /// @return the gradient at the given surfel.
+      Vector3 computeGradientAtVoxel( const Point3i& p ) const
+      {
+	Vector3 grad;
+	for ( Dimension i = 0; i < 3; i++ )
+	  grad[ i ]   =
+	    0.5*( (Scalar) at( p + Point3i::base( i ) ) - (Scalar) at( p - Point3i::base( i ) ) );
+	return grad != Point3::zero ? grad.getNormalized() : grad;
+      }
+      
+      Vector3 interpolateGradient( const Point3i& base, const Point3& p ) const
+      {
+	const Scalar  a = p[ 0 ];
+	const Scalar  b = p[ 1 ];
+	const Scalar  c = p[ 2 ];
+	const Scalar ma = 1.0 - a;
+	const Scalar mb = 1.0 - b;
+	const Scalar mc = 1.0 - c;
+	Vector3 grad = (ma*mb*mc) * myGradientImage( base )
+	  +            ( a*mb*mc) * myGradientImage( base + Point3i(1,0,0) )
+	  +            (ma* b*mc) * myGradientImage( base + Point3i(0,1,0) )
+	  +            ( a* b*mc) * myGradientImage( base + Point3i(1,1,0) )
+	  +            (ma*mb* c) * myGradientImage( base + Point3i(0,0,1) )
+	  +            ( a*mb* c) * myGradientImage( base + Point3i(1,0,1) )
+	  +            (ma* b* c) * myGradientImage( base + Point3i(0,1,1) )
+	  +            ( a* b* c) * myGradientImage( base + Point3i(1,1,1) );
+	return grad.getNormalized();
+      }
 
       /// @return the normal vector at point \a p on the object (\a p
       /// should be on or close to the sphere).
@@ -239,7 +313,7 @@ namespace DGtal {
             if ( cfg > 0 && cfg < 255 ) // intersection possible
               {
                 // std::cout << " *";
-                if ( intersect8Cube( ray, ray_inter, p ) )
+                if ( intersect8Cube( ray, ray_inter, p, cfg ) )
                   {
                     Scalar proj  =
                       ( ray_inter.intersection - ray.origin )
@@ -303,7 +377,7 @@ namespace DGtal {
         last_base = base;
       }
       
-      bool intersect8Cube( const Ray& ray, RayIntersection& ray_inter, Point3i base )
+      bool intersect8Cube( const Ray& ray, RayIntersection& ray_inter, Point3i base, int cfg )
       {
         // Make the local polynomial isosurface
         Polynomial L;
@@ -311,14 +385,27 @@ namespace DGtal {
         PolynomialShape PS( L );
         // std::cout << " PS=" << PS << std::endl;
         // Checks for intersection along ray
-        const Point3     p = Point3( 0.5, 0.5, 0.5 );
+        Point3         p = Point3( 0.5, 0.5, 0.5 );
         // Project onto ray.
         ray_inter.distance = 1.0;
-        const Point3&    o = ray.origin; // p + ray.origin;
-        const Vector3&   u = ray.direction;
+        const Point3&  o = ray.origin; // p + ray.origin;
+        const Vector3& u = ray.direction;
         Point3  B = Point3( base[ 0 ], base[ 1 ], base[ 2 ] );
         Point3 rO = o - B;
         Point3 q  = rO + (p - rO).dot( u ) * u;
+	Scalar d2 = (q-p).dot(q-p);
+	for ( Dimension l = 0; l < 8; l++ )
+	  if ( cfg & (1<<l) )
+	    {
+	      Point3 pp( (l & 1) ? 1 : 0, (l & 2) ? 1 : 0, (l & 4) ? 1 : 0 );
+	      Point3 qq  = rO + (pp - rO).dot( u ) * u;
+	      Scalar dd2 = (qq-pp).dot(qq-pp);
+	      if ( dd2 < d2 )
+		{
+		  d2 = dd2;
+		  q = qq;
+		}
+	    }
         bool found = false;
         found = intersectPolynomialShape( PS, u, q );
         if ( ! found ) return false;
@@ -326,9 +413,13 @@ namespace DGtal {
         if ( ( q[ 0 ] < -0.001 ) || ( q[ 0 ] > 1.001 )
              || ( q[ 1 ] < -0.001 ) || ( q[ 1 ] > 1.001 )
              || ( q[ 2 ] < -0.001 ) || ( q[ 2 ] > 1.001 ) ) return false;
-        last_n     = -PS.gradient( q );
-        if ( last_n == Vector3::zero ) return false;
-        last_n    /= last_n.norm();
+
+	// GOURAUD type shading
+        /* last_n     = -PS.gradient( q ); */
+        /* if ( last_n == Vector3::zero ) return false; */
+        /* last_n    /= last_n.norm(); */
+	// PHONG shading
+        last_n     = - interpolateGradient( base, q );
         // std::cout << "- base=" << base << " P=" << L << std::endl;
         // std::cout << "  => found q=" << q << " n=" << last_n << " pi=" << (q + B) << std::endl;
         q         += B + Point3::diagonal(0.5); // + p; // B - p;
@@ -418,17 +509,17 @@ namespace DGtal {
       {
         const int   iter = 12;
         //const Scalar att = 0.5;
-        const Scalar eps = 0.0025;
+        const Scalar eps = 0.005;
         Scalar      val = PS( q );
         for ( int n = 0; n < iter; n++ )
           {
             if ( fabs( val ) <= eps ) return true;
             Vector3  g = PS.gradient( q );
 	    Scalar  ng = g.norm();
-	    if ( ng < 0.00001 ) return false;
+	    if ( ng < 0.00001 ) break;
             Scalar   t = - val * ng / g.dot( u );
 	    q         += t * u;
-            if ( q.normInfinity() > 1.5 ) return false;
+            if ( q.normInfinity() > 2.0 ) return false;
             val        = PS( q );
             // std::cout << "PS(q)=" << val << std::endl;
           }
@@ -443,6 +534,8 @@ namespace DGtal {
       ThresholdedImage myThresholdedImage;
       /// The configuration image.
       Image            myCfgImage;
+      /// The gradient image (for Phong shading).
+      VectorImage      myGradientImage;
       /// The threshold
       Value            myT;
       /// the Khalimsky space

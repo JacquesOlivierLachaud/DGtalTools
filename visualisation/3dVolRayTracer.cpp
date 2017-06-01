@@ -317,31 +317,41 @@ int main( int argc, char** argv )
 
   if ( vm.count( "antiAliasedInput" ) )
     {
-      string inputFilename = vm["antiAliasedInput"].as<string>();
-      int threshold        = 128;
-      std::string  material= vm["material"].as<string>();
-      trace.beginBlock( "Reading vol file into an image." );
       typedef HyperRectDomain< Space3 >                 Domain;
       typedef ImageContainerBySTLVector< Domain, int >  Image;
       typedef GraphicalImplicitDigitalVolume< Image >   Volume;
-      Point3i p( 0, 0, 0 );
-      Point3i q( 3, 3, 3 );
-      Domain domain( p, q );
-      Image image( domain );
-      image.setValue( Point3i( 1,1,1 ), 255 );
-      //image.setValue( Point3i( 1,1,2 ), 255 );
-      //image.setValue( Point3i( 1,2,1 ), 255 );
-      image.setValue( Point3i( 1,2,2 ), 255 );
-      // image.setValue( Point3i( 2,1,1 ), 255 );
-      // image.setValue( Point3i( 2,1,2 ), 255 );
-      // image.setValue( Point3i( 2,2,1 ), 255 );
-      // image.setValue( Point3i( 2,2,2 ), 255 );
-      // Image image = VolReader<Image>::importVol(inputFilename);
-      trace.endBlock();
-      trace.beginBlock( "Making implicit digital volume." );
-      Volume* vol = new Volume( image, threshold, string2material( material ) );
-      scene.addObject( vol );
-      trace.endBlock();
+      string inputFilename = vm["antiAliasedInput"].as<string>();
+      int threshold        = 128;
+      std::string  material= vm["material"].as<string>();
+      if ( inputFilename != "test" )
+	{
+	  trace.beginBlock( "Reading vol file into an image." );
+	  Image image = VolReader<Image>::importVol(inputFilename);
+	  trace.endBlock();
+	  trace.beginBlock( "Making implicit digital volume." );
+	  Volume* vol = new Volume( image, threshold, string2material( material ) );
+	  scene.addObject( vol );
+	  trace.endBlock();
+	}
+      else
+	{
+	  Point3i p( 0, 0, 0 );
+	  Point3i q( 3, 3, 3 );
+	  Domain domain( p, q );
+	  Image image( domain );
+	  image.setValue( Point3i( 1,1,1 ), 255 );
+	  //image.setValue( Point3i( 1,1,2 ), 255 );
+	  image.setValue( Point3i( 1,2,1 ), 255 );
+	  image.setValue( Point3i( 1,2,2 ), 255 );
+	  // image.setValue( Point3i( 2,1,1 ), 255 );
+	  // image.setValue( Point3i( 2,1,2 ), 255 );
+	  // image.setValue( Point3i( 2,2,1 ), 255 );
+	  // image.setValue( Point3i( 2,2,2 ), 255 );
+	  trace.beginBlock( "Making implicit digital volume." );
+	  Volume* vol = new Volume( image, threshold, string2material( material ) );
+	  scene.addObject( vol );
+	  trace.endBlock();
+	}
     }
 
   
