@@ -1107,7 +1107,7 @@ namespace DGtal
 			   const std::vector< RealVector > & v2 )
     {
       AngleDevStatistic stat;
-      for ( auto it1 = v1.cbegin(), it2 = v2.cbegin(), itE1 = v1.end();
+      for ( auto it1 = v1.cbegin(), it2 = v2.cbegin(), itE1 = v1.cend();
 	    it1 != itE1; ++it1, ++it2 )
 	{
           Scalar angle_error = acos( (*it1).dot( *it2 ) );
