@@ -11,6 +11,7 @@ SET(DGTAL_TOOLS_SRC
   eulerCharacteristic
   3dCorrectedNormalCurrent
   3dFastCorrectedNormalCurrent
+  3d-fcnc
 )
 
 if (WITH_EIGEN)

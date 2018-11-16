@@ -92,6 +92,7 @@ int main( int argc, char** argv )
   typedef Surface::DigitalSurfaceContainer      Container;
   typedef SH::RealVector                        RealVector;
   typedef SH::BinaryImage                       BinaryImage;
+  typedef SH::ImplicitShape3D                   ImplicitShape3D;
   typedef FastCorrectedNormalCurrent<Container> Current;
   typedef Current::Vertex                       Vertex;
   
@@ -110,13 +111,12 @@ int main( int argc, char** argv )
   general_opt.add_options()
     ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), and HII and GII are the mean and gaussian curvatures estimated by II." )
     ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." );
-  //#ifdef WITH_VISU3D_QGLVIEWER
   EH::optionsDisplayValues   ( general_opt );
-  general_opt.add_options()
-    ( "view,V", po::value<std::string>()->default_value( "Measure" ), "the display mode in Measure|Truth|Error|None" );
   //#endif
   general_opt.add_options()
     ( "error", po::value<std::string>()->default_value( "error.txt" ), "the name of the output file that sum up l2 and loo errors in estimation." );
+  general_opt.add_options()
+    ( "output,o", po::value<std::string>()->default_value( "fcnc" ), "the basename for output obj files." );
   
   po::variables_map vm;
   bool parseOK = EH::args2vm( general_opt, argc, argv, vm );
@@ -125,7 +125,7 @@ int main( int argc, char** argv )
   if ( vm.count( "polynomial-list" ) )
     {
       trace.info() << "List of predefined polynomials:" << std::endl;
-      auto L = SG::getPolynomialList();
+      auto L = SH::getPolynomialList();
       for ( auto p : L ) {
 	trace.info() << "  " << p.first << " -> " << p.second << std::endl;
       }
@@ -158,10 +158,10 @@ int main( int argc, char** argv )
   }
 
   // Digital space.
-  KSpace                        K;
-  unsigned int                 nb = 0;
-  CountedPtr<BinaryImage>  bimage( nullptr );
-  CountedPtr<ImplicitShape> shape( nullptr );
+  KSpace                      K;
+  unsigned int                nb = 0;
+  CountedPtr<BinaryImage>     bimage( nullptr );
+  CountedPtr<ImplicitShape3D> shape ( nullptr );
   auto params = SH::defaultParameters() | SHG::defaultParameters();
   trace.beginBlock( "Make Shape" );
   // Generic parameters.
@@ -175,11 +175,12 @@ int main( int argc, char** argv )
   params( "projectionGamma",        0.5 ); // the displacement coef. of the projection.
   params( "verbose",                  1 );
   params( "t-ring",            vm[ "trivial-ring" ].as<double>() );
-  params( "kernel",            vm[ "kernel"       ].as<double>() );
+  params( "kernel",            vm[ "kernel"       ].as<string>() );
   params( "R-radius",          vm[ "R-radius"     ].as<double>() );
   params( "r-radius",          vm[ "r-radius"     ].as<double>() );
   params( "alpha",             vm[ "alpha"        ].as<double>() );
-  params( "surfelEmbedding",   vm[ "embedding"    ].as<double>() );
+  params( "surfelEmbedding",   vm[ "embedding"    ].as<int>()    );
+  trace.info() << params << std::endl;
   if ( vm.count( "polynomial" ) )
     {
       // Fill useful parameters
@@ -190,13 +191,13 @@ int main( int argc, char** argv )
       shape        = SH::makeImplicitShape3D( params );
       K            = SH::getKSpace( params );
       auto dshape  = SH::makeDigitizedImplicitShape3D( shape, params );
-      bimage       = EH::makeBinaryImage( dshape, params );
+      bimage       = SH::makeBinaryImage( dshape, params );
     }
   else if ( vm.count( "input" ) )
     {
       // Fill useful parameters
-      params( "thresholdMin", vm[ "thresholdMin" ].as<string>() );
-      params( "thresholdMax", vm[ "thresholdMax" ].as<string>() );
+      params( "thresholdMin", vm[ "thresholdMin" ].as<int>() );
+      params( "thresholdMax", vm[ "thresholdMax" ].as<int>() );
       params( "closed",       vm[ "closed"       ].as<int>()    );
       auto volfile = vm[ "input" ].as<string>();
       bimage       = SH::makeBinaryImage( volfile, params );
@@ -211,7 +212,8 @@ int main( int argc, char** argv )
 		 [&nb] ( bool v ) { nb += v ? 1 : 0; } );
   trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
   
-  auto surface = EH::makeIdxDigitalSurface( bimage, params );
+  auto surface     = SH::makeDigitalSurface( bimage, K, params );
+  auto idx_surface = SH::makeIdxDigitalSurface( surface );
   if ( surface == 0 ) {
     trace.error() << "- surface is empty (either empty or full volume). ";
     trace.info()  << std::endl;
@@ -222,76 +224,86 @@ int main( int argc, char** argv )
   trace.endBlock();
 
   auto estimator     = vm[ "estimator" ].as<string>();
-  auto view          = vm[ "view"      ].as<string>();
   const double h     = vm[ "gridstep"  ].as<double>();
   const double mcoef = vm[ "m-coef"    ].as<double>();
   const double mpow  = vm[ "m-pow"     ].as<double>();
   const double mr    = mcoef * pow( h, mpow );
-  std::vector<double>     displayed_values;
-  std::vector<double>     measured_values;
-  std::vector<double>     expected_values;
-  std::vector<RealVector> normals;
-  Statistic<double>       stat_exp_curv;
-  Statistic<double>       stat_meas_curv;
+  SH::Scalars       displayed_values;
+  SH::Scalars       expected_values;
+  SH::Scalars       measured_values;
+  SH::RealVectors   expected_normals;
+  SH::RealVectors   measured_normals;
+  Statistic<double> stat_expected_curv;
+  Statistic<double> stat_measured_curv;
   
   trace.beginBlock( "Compute surfels" );
   params( "surfaceTraversal", "DepthFirst" );
-  auto dft_surfels = SH::getSurfelRange( surface, params );
+  auto dft_surfels  = SH::getSurfelRange( surface, params );
   trace.endBlock();
 
-  if ( vm.count( "polynomial" ) ) {
-    trace.beginBlock( "Compute true normals" );
-    normals         = SHG::getNormalVectors( shape, K, surfels, params );
-    trace.endBlock();
-    trace.beginBlock( "Compute true curvatures" );
-    expected_values = ( ( quantity == "H" ) || ( quantity == "Mu1" )
-			|| ( quantity == "HII" ) )
-      ? SHG::getMeanCurvatures    ( shape, K, surfels, params )
-      : SHG::getGaussianCurvatures( shape, K, surfels, params );
-    stat_exp_curv.addValues( expected_values.cbegin(), expected_values.cend() );
-    stat_exp_curv.terminate();
-    trace.info() << "- truth curv: avg = " << stat_exp_curv.mean() << std::endl;
-    trace.info() << "- truth curv: min = " << stat_exp_curv.min() << std::endl;
-    trace.info() << "- truth curv: max = " << stat_exp_curv.max() << std::endl;
-    trace.endBlock();
-  } else {
-    trace.beginBlock( "Estimate normals" );
-      if ( estimator == "Trivial" )
-	normals = SHG::getTrivialNormalVectors( K, surfels );
-      else if ( estimator == "CTrivial" )
-	normals = SHG::getCTrivialNormalVectors( surface, surfels, params );
-      else if ( estimator == "VCM" )
-	normals = SHG::getVCMNormalVectors( surface, surfels, params );
-      else if ( estimator == "II" )
-	normals = SHG::getIINormalVectors( bimage, surfels, params );
-    trace.endBlock();
-  }
+  // Compute true and/or estimated normal vectors
+  if ( vm.count( "polynomial" ) )
+    {
+      trace.beginBlock( "Compute true normals" );
+      expected_normals = SHG::getNormalVectors( shape, K, dft_surfels, params );
+      trace.endBlock();
+    }
+  trace.beginBlock( "Estimate normals" );
+  if ( estimator == "True" && vm.count( "polynomial" ) )
+    measured_normals = expected_normals;
+  else if ( estimator == "CTrivial" )
+    measured_normals = SHG::getCTrivialNormalVectors( surface, dft_surfels, params );
+  else if ( estimator == "VCM" )
+    measured_normals = SHG::getVCMNormalVectors( surface, dft_surfels, params );
+  else if ( estimator == "II" )
+    measured_normals = SHG::getIINormalVectors( bimage, dft_surfels, params );
+  else // default is "Trivial"
+    measured_normals = SHG::getTrivialNormalVectors( K, dft_surfels );
+  trace.endBlock();
+
+  // Compute true or estimated curvatures
+  double time_ground_truth = 0.0;
+  double time_estimations  = 0.0;
+  if ( vm.count( "polynomial" ) )
+    {
+      trace.beginBlock( "Compute true curvatures" );
+      expected_values = ( ( quantity == "H" ) || ( quantity == "Mu1" )
+			  || ( quantity == "HII" ) )
+	? SHG::getMeanCurvatures    ( shape, K, dft_surfels, params )
+	: SHG::getGaussianCurvatures( shape, K, dft_surfels, params );
+      stat_expected_curv.addValues( expected_values.cbegin(), expected_values.cend() );
+      stat_expected_curv.terminate();
+      trace.info() << "- truth curv: avg = " << stat_expected_curv.mean() << std::endl;
+      trace.info() << "- truth curv: min = " << stat_expected_curv.min() << std::endl;
+      trace.info() << "- truth curv: max = " << stat_expected_curv.max() << std::endl;
+      time_ground_truth = trace.endBlock();
+    }
   if ( ( quantity == "HII" ) || ( quantity == "GII" ) )
     {
       trace.beginBlock( "Compute II curvature estimations" );
       measured_values = ( quantity == "HII" )
-	? SHG::getIIMeanCurvatures    ( bimage, surfels, params )
-	: SHG::getIIGaussianCurvatures( bimage, surfels, params );
-      stat_meas_curv.addValues( measured_values.cbegin(), measured_values.cend() );
-      stat_meas_curv.terminate();
-      trace.info() << "- II curv: avg = " << stat_meas_curv.mean() << std::endl;
-      trace.info() << "- II curv: min = " << stat_meas_curv.min() << std::endl;
-      trace.info() << "- II curv: max = " << stat_meas_curv.max() << std::endl;
-      trace.endBlock();
+	? SHG::getIIMeanCurvatures    ( bimage, dft_surfels, params )
+	: SHG::getIIGaussianCurvatures( bimage, dft_surfels, params );
+      stat_measured_curv.addValues( measured_values.cbegin(), measured_values.cend() );
+      stat_measured_curv.terminate();
+      trace.info() << "- II curv: avg = " << stat_measured_curv.mean() << std::endl;
+      trace.info() << "- II curv: min = " << stat_measured_curv.min() << std::endl;
+      trace.info() << "- II curv: max = " << stat_measured_curv.max() << std::endl;
+      time_estimations = trace.endBlock();
     }
-  else // if ( view == "Measure" || view == "Error" )
+  else 
     {
-      trace.beginBlock( "Computing corrected normal current" );
-      Current C( *surface, h, vm.count( "crisp" ) );
-      C.setCorrectedNormals( surfels.begin(), surfels.end(), normals.begin() );
+      trace.beginBlock( "Compute corrected normal current" );
+      Current C( *idx_surface, h, vm.count( "crisp" ) );
+      C.setCorrectedNormals( dft_surfels.begin(), dft_surfels.end(), measured_normals.begin() );
       trace.info() << C << " m-ball-r = " << mr << "(continuous)"
 		   << " " << (mr/h) << " (discrete)" << std::endl;
       double              area = 0.0;
       double              intG = 0.0;
-      std::vector<double> mu0( surfels.size() );
-      std::vector<double> mu1( surfels.size() );
-      std::vector<double> mu2( surfels.size() );
-      std::vector<double> muOmega( surfels.size() );
+      std::vector<double> mu0( dft_surfels.size() );
+      std::vector<double> mu1( dft_surfels.size() );
+      std::vector<double> mu2( dft_surfels.size() );
+      std::vector<double> muOmega( dft_surfels.size() );
       bool       mu0_needed = true;
       bool       mu1_needed = false;
       bool       mu2_needed = false;
@@ -314,8 +326,8 @@ int main( int argc, char** argv )
       //#pragma omp parallel for schedule(dynamic)
       trace.info() << "compute measures" << std::endl;
       Vertex              i = 0;
-      Vertex              j = surfels.size();
-      for ( auto aSurfel : surfels )
+      Vertex              j = dft_surfels.size();
+      for ( auto aSurfel : dft_surfels )
 	{
 	  // std::cout << i << " / " << j << std::endl;
 	  trace.progressBar( i, j );
@@ -331,7 +343,7 @@ int main( int argc, char** argv )
       if ( mu2_needed )
 	{
 	  trace.info() << "compute total Gauss curvature" << std::endl;
-	  for ( auto f : surface->allFaces() ) intG += C.mu2( f );
+	  for ( auto f : idx_surface->allFaces() ) intG += C.mu2( f );
 	}
       if ( quantity == "Mu0" )          measured_values = mu0;
       else if ( quantity == "Mu1" )     measured_values = mu1;
@@ -339,61 +351,81 @@ int main( int argc, char** argv )
       else if ( quantity == "MuOmega" ) measured_values = muOmega;
       else if ( quantity == "H" )
 	{
-	  measured_values.resize( surfels.size() );
+	  measured_values.resize( dft_surfels.size() );
 	  std::transform( mu0.cbegin(), mu0.cend(),
 			  mu1.cbegin(), measured_values.begin(),
 			  [] ( double m0, double m1 ) { return m1 / (2.0*m0); } );
 	}
       else if ( quantity == "G" )
 	{
-	  measured_values.resize( surfels.size() );
+	  measured_values.resize( dft_surfels.size() );
 	  std::transform( mu0.cbegin(), mu0.cend(),
 			  mu2.cbegin(), measured_values.begin(),
 			  [] ( double m0, double m2 ) { return m2 / m0; } );
 	}
       else if ( quantity == "Omega" )
 	{
-	  measured_values.resize( surfels.size() );
+	  measured_values.resize( dft_surfels.size() );
 	  std::transform( mu0.cbegin(), mu0.cend(),
 			  muOmega.cbegin(), measured_values.begin(),
 			  [] ( double m0, double m2 ) { return m2 / sqrt( m0 ); } );
 	}
-      for ( i = 0; i < j; ++i ) stat_meas_curv.addValue( measured_values[ i ] );
-      stat_meas_curv.terminate();
+      for ( i = 0; i < j; ++i ) stat_measured_curv.addValue( measured_values[ i ] );
+      stat_measured_curv.terminate();
       trace.info() << "- CNC area      = " << area << std::endl;
       trace.info() << "- CNC total G   = " << intG << std::endl;
-      trace.info() << "- CNC curv: avg = " << stat_meas_curv.mean() << std::endl;
-      trace.info() << "- CNC curv: min = " << stat_meas_curv.min() << std::endl;
-      trace.info() << "- CNC curv: max = " << stat_meas_curv.max() << std::endl;
-      trace.endBlock();
+      trace.info() << "- CNC curv: avg = " << stat_measured_curv.mean() << std::endl;
+      trace.info() << "- CNC curv: min = " << stat_measured_curv.min() << std::endl;
+      trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
+      time_estimations = trace.endBlock();
     }
 
-#ifdef WITH_VISU3D_QGLVIEWER
-  if ( view != "None" ) {
-    typedef Viewer3D<Space,KSpace> MyViewever3D;
-    typedef Display3DFactory<Space,KSpace> MyDisplay3DFactory;
-    
-    trace.beginBlock( "View measure" );
-    trace.info() << "view mode is " << view << std::endl;
-    trace.info() << "#mvalues=" << measured_values.size() << std::endl;
-    trace.info() << "#evalues=" << expected_values.size() << std::endl;
-    MyViewever3D viewer( K );
-    viewer.show();
-    if ( view == "Measure" ) 
-      displayed_values = measured_values;
-    else if ( view == "Truth" )
-      displayed_values = expected_values;
-    else if ( view == "Error" )
-      displayed_values = EH::absoluteDifference( measured_values, expected_values );
-    trace.info() << "#surfels=" << surfels.size() << std::endl;
-    trace.info() << "#dvalues=" << displayed_values.size() << std::endl;
-    EH::viewSurfelValues( viewer, vm, surfels, displayed_values, normals );
-    EH::viewSurfaceIsolines( viewer, vm, surface, surfels, displayed_values );
-    viewer << MyViewever3D::updateDisplay;
-    application.exec();
-    trace.endBlock();
-  }
-#endif
+  trace.beginBlock( "Save results as OBJ" );
+  const bool has_ground_truth = expected_values.size() != 0;
+  const bool has_estimations  = measured_values.size() != 0;
+  const auto minValue         = vm[ "minValue" ].as<double>();
+  const auto maxValue         = vm[ "maxValue" ].as<double>();
+  const auto colormap_name    = vm[ "colormap" ].as<string>();
+  const auto outputfile       = vm[ "output"   ].as<string>();
+  const auto colormap         = SH::getColorMap( minValue, maxValue, colormap_name );
+
+  trace.info() << "#mvalues=" << measured_values.size() << std::endl;
+  trace.info() << "#evalues=" << expected_values.size() << std::endl;
+
+  trace.beginBlock( "Compute surfels" );
+  params( "surfaceTraversal", "Default" );
+  const auto surfels = SH::getSurfelRange( surface, params );
+  const auto match   = SH::getRangeMatch ( surfels, dft_surfels );
+  trace.endBlock();
+
+  auto colors = SH::Colors( surfels.size() );
+  if ( has_ground_truth )
+    {
+      for ( SH::Idx i = 0; i < colors.size(); i++ )
+	colors[ i ] = colormap( expected_values[ match[ i ] ] ); 
+      SH::saveOBJ( surface, SH::getMatchedRange( expected_normals, match ), colors,
+		   outputfile+"-truth.obj" );
+    }
+  if ( has_estimations )
+    {
+      for ( SH::Idx i = 0; i < colors.size(); i++ )
+	colors[ i ] = colormap( measured_values[ match[ i ] ] ); 
+      SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
+		   outputfile+"-estimation.obj" );
+    }
+  if ( has_ground_truth && has_estimations )
+    {
+      const auto error_values = SHG::getScalarsAbsoluteDifference( measured_values, expected_values );
+      const auto stat_error   = SHG::getStatistic( error_values );
+      const auto error_cmap   = SH::getColorMap( 0.0, 2.0 * stat_error.mean(),
+						 params( "colormap", "Custom" ) );
+      for ( SH::Idx i = 0; i < colors.size(); i++ )
+	colors[ i ] = colormap( error_values[ match[ i ] ] ); 
+      SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
+		   outputfile+"-error.obj" );
+    }
+  trace.endBlock();
+  
   if ( ! vm.count( "polynomial" ) ) return 0;
   
   trace.beginBlock( "Output statistics" );
@@ -418,17 +450,17 @@ int main( int argc, char** argv )
        << " m_mean m_dev m_min m_max"
        << " exp_mean exp_dev exp_min exp_max " << std::endl;
   ferr << h << " " << measured_values.size()
-       << " " << EH::normL1 ( measured_values, expected_values )
-       << " " << EH::normL2 ( measured_values, expected_values )
-       << " " << EH::normLoo( measured_values, expected_values )
-       << " " << stat_meas_curv.mean()
-       << " " << sqrt( stat_meas_curv.variance() )
-       << " " << stat_meas_curv.min()
-       << " " << stat_meas_curv.max()
-       << " " << stat_exp_curv.mean()
-       << " " << sqrt( stat_exp_curv.variance() )
-       << " " << stat_exp_curv.min()
-       << " " << stat_exp_curv.max()
+       << " " << SHG::getScalarsNormL1 ( measured_values, expected_values )
+       << " " << SHG::getScalarsNormL2 ( measured_values, expected_values )
+       << " " << SHG::getScalarsNormLoo( measured_values, expected_values )
+       << " " << stat_measured_curv.mean()
+       << " " << sqrt( stat_measured_curv.variance() )
+       << " " << stat_measured_curv.min()
+       << " " << stat_measured_curv.max()
+       << " " << stat_expected_curv.mean()
+       << " " << sqrt( stat_expected_curv.variance() )
+       << " " << stat_expected_curv.min()
+       << " " << stat_expected_curv.max()
        << std::endl;
   ferr << "#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
        << std::endl;
