@@ -312,7 +312,6 @@ namespace DGtal
 	("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding for VCM estimator: 0: Pointels, 1: InnerSpel, 2: OuterSpel." );
     }
 
-#ifdef WITH_VISU3D_QGLVIEWER
     /// Add options for implicit shape digitization.
     static void optionsDisplayValues( po::options_description& desc )
     {
@@ -323,7 +322,6 @@ namespace DGtal
 	("minValue", po::value<double>(), "a specified min value associated with lowest color in colormap ." )
 	("maxValue", po::value<double>(), "a specified max value associated with highest color in colormap ." );
     }
-#endif
     
     // ------------------- Shapes related functions -----------------------------
     
