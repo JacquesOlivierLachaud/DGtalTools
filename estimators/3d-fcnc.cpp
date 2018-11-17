@@ -116,6 +116,8 @@ int main( int argc, char** argv )
   general_opt.add_options()
     ( "error", po::value<std::string>()->default_value( "error.txt" ), "the name of the output file that sum up l2 and loo errors in estimation." );
   general_opt.add_options()
+    ( "max-error", po::value<double>()->default_value( 0.2 ), "the error value corresponding to black." );
+  general_opt.add_options()
     ( "output,o", po::value<std::string>()->default_value( "fcnc" ), "the basename for output obj files." );
   
   po::variables_map vm;
@@ -165,7 +167,7 @@ int main( int argc, char** argv )
   auto params = SH::defaultParameters() | SHG::defaultParameters();
   trace.beginBlock( "Make Shape" );
   // Generic parameters.
-  params( "gristep",           vm[ "gridstep" ].as<double>() );
+  params( "gridstep",          vm[ "gridstep" ].as<double>() );
   params( "noise",             vm[ "noise"    ].as<double>() );
   params( "surfelAdjacency",          0 ); // 0:interior
   params( "nbTriesToFindABel",   100000 ); // number of tries in method Surfaces::findABel
@@ -235,6 +237,10 @@ int main( int argc, char** argv )
   SH::RealVectors   measured_normals;
   Statistic<double> stat_expected_curv;
   Statistic<double> stat_measured_curv;
+  double time_curv_ground_truth  = 0.0;
+  double time_curv_estimations   = 0.0;
+  double time_mu_estimations     = 0.0;
+  double time_normal_estimations = 0.0;
   
   trace.beginBlock( "Compute surfels" );
   params( "surfaceTraversal", "DepthFirst" );
@@ -259,11 +265,9 @@ int main( int argc, char** argv )
     measured_normals = SHG::getIINormalVectors( bimage, dft_surfels, params );
   else // default is "Trivial"
     measured_normals = SHG::getTrivialNormalVectors( K, dft_surfels );
-  trace.endBlock();
+  time_normal_estimations = trace.endBlock();
 
   // Compute true or estimated curvatures
-  double time_ground_truth = 0.0;
-  double time_estimations  = 0.0;
   if ( vm.count( "polynomial" ) )
     {
       trace.beginBlock( "Compute true curvatures" );
@@ -276,7 +280,7 @@ int main( int argc, char** argv )
       trace.info() << "- truth curv: avg = " << stat_expected_curv.mean() << std::endl;
       trace.info() << "- truth curv: min = " << stat_expected_curv.min() << std::endl;
       trace.info() << "- truth curv: max = " << stat_expected_curv.max() << std::endl;
-      time_ground_truth = trace.endBlock();
+      time_curv_ground_truth = trace.endBlock();
     }
   if ( ( quantity == "HII" ) || ( quantity == "GII" ) )
     {
@@ -289,7 +293,7 @@ int main( int argc, char** argv )
       trace.info() << "- II curv: avg = " << stat_measured_curv.mean() << std::endl;
       trace.info() << "- II curv: min = " << stat_measured_curv.min() << std::endl;
       trace.info() << "- II curv: max = " << stat_measured_curv.max() << std::endl;
-      time_estimations = trace.endBlock();
+      time_curv_estimations = trace.endBlock();
     }
   else 
     {
@@ -315,6 +319,7 @@ int main( int argc, char** argv )
       if ( quantity == "H" )       mu0_needed = mu1_needed = true;
       if ( quantity == "G" )       mu0_needed = mu2_needed = true;
       if ( quantity == "Omega" )   mu0_needed = muOmega_needed = true;
+      trace.beginBlock( "Compute mu_k everywhere" );
       trace.info() << "computeAllMu0" << std::endl;
       if ( mu0_needed ) C.computeAllMu0();
       trace.info() << "computeAllMu1" << std::endl;
@@ -323,6 +328,7 @@ int main( int argc, char** argv )
       if ( mu2_needed ) C.computeAllMu2();
       trace.info() << "computeAllMuOmega" << std::endl;
       if ( muOmega_needed ) C.computeAllMuOmega();
+      time_mu_estimations = trace.endBlock();
       //#pragma omp parallel for schedule(dynamic)
       trace.info() << "compute measures" << std::endl;
       Vertex              i = 0;
@@ -377,7 +383,7 @@ int main( int argc, char** argv )
       trace.info() << "- CNC curv: avg = " << stat_measured_curv.mean() << std::endl;
       trace.info() << "- CNC curv: min = " << stat_measured_curv.min() << std::endl;
       trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
-      time_estimations = trace.endBlock();
+      time_curv_estimations = trace.endBlock();
     }
 
   trace.beginBlock( "Save results as OBJ" );
@@ -416,11 +422,12 @@ int main( int argc, char** argv )
   if ( has_ground_truth && has_estimations )
     {
       const auto error_values = SHG::getScalarsAbsoluteDifference( measured_values, expected_values );
+      const auto max_error    = vm[ "max-error" ].as<double>();
       const auto stat_error   = SHG::getStatistic( error_values );
-      const auto error_cmap   = SH::getColorMap( 0.0, 2.0 * stat_error.mean(),
+      const auto error_cmap   = SH::getColorMap( 0.0, max_error,
 						 params( "colormap", "Custom" ) );
       for ( SH::Idx i = 0; i < colors.size(); i++ )
-	colors[ i ] = colormap( error_values[ match[ i ] ] ); 
+	colors[ i ] = error_cmap( error_values[ match[ i ] ] ); 
       SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
 		   outputfile+"-error.obj" );
     }
@@ -446,9 +453,15 @@ int main( int argc, char** argv )
        << " P="  << vm[ "polynomial" ].as<std::string>()
        << " mr= " << mr << "(continuous)"
        << " mrd=" << (mr/h) << " (discrete)" << std::endl;
-  ferr << "# h size l1 l2 loo"
-       << " m_mean m_dev m_min m_max"
-       << " exp_mean exp_dev exp_min exp_max " << std::endl;
+  ferr << "# time_curv_ground_truth  = " << time_curv_ground_truth << " ms" << std::endl
+       << "# time_normal_estimations = " << time_normal_estimations << " ms" << std::endl
+       << "# time_curv_estimations   = " << time_curv_estimations << " ms" << std::endl
+       << "# time_mu_estimations     = " << time_mu_estimations << " ms" << std::endl;
+  ferr << "# h(1) size(2) l1(3) l2(4) loo(5)"
+       << " m_mean(6) m_dev(7) m_min(8) m_max(9)"
+       << " exp_mean(10) exp_dev(11) exp_min(12) exp_max(13) " << std::endl;
+  ferr << "# mr(14) mrd(15) t_curv_gt(16) t_normal_est(17) t_curv_est(18) t_mu_est(19)"
+       << std::endl;
   ferr << h << " " << measured_values.size()
        << " " << SHG::getScalarsNormL1 ( measured_values, expected_values )
        << " " << SHG::getScalarsNormL2 ( measured_values, expected_values )
@@ -460,7 +473,10 @@ int main( int argc, char** argv )
        << " " << stat_expected_curv.mean()
        << " " << sqrt( stat_expected_curv.variance() )
        << " " << stat_expected_curv.min()
-       << " " << stat_expected_curv.max()
+       << " " << stat_expected_curv.max();
+  ferr << " " << mr << " " << (mr/h) << " " << time_curv_ground_truth
+       << " " << time_normal_estimations << " " << time_curv_estimations
+       << " " << time_mu_estimations
        << std::endl;
   ferr << "#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
        << std::endl;
