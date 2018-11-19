@@ -461,6 +461,7 @@ int main( int argc, char** argv )
        << " m_mean(6) m_dev(7) m_min(8) m_max(9)"
        << " exp_mean(10) exp_dev(11) exp_min(12) exp_max(13) " << std::endl;
   ferr << "# mr(14) mrd(15) t_curv_gt(16) t_normal_est(17) t_curv_est(18) t_mu_est(19)"
+       << " r-radius(20)"
        << std::endl;
   ferr << h << " " << measured_values.size()
        << " " << SHG::getScalarsNormL1 ( measured_values, expected_values )
@@ -477,6 +478,7 @@ int main( int argc, char** argv )
   ferr << " " << mr << " " << (mr/h) << " " << time_curv_ground_truth
        << " " << time_normal_estimations << " " << time_curv_estimations
        << " " << time_mu_estimations
+       << " " << vm[ "r-radius" ].as<double>()
        << std::endl;
   ferr << "#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
        << std::endl;
