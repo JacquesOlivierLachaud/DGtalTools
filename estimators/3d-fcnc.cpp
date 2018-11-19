@@ -68,6 +68,18 @@ using namespace std;
 
 ///////////////////////////////////////////////////////////////////////////////
 
+template <typename Scalar>
+GradientColorMap<Scalar> 
+getErrorColorMap( Scalar max )
+{
+  GradientColorMap<Scalar> gradcmap( 0.0, max );
+  gradcmap.addColor( Color( 255, 255, 255 ) );
+  gradcmap.addColor( Color( 255,   0,   0 ) );
+  gradcmap.addColor( Color( 0,   0,   0 ) );
+  return gradcmap;
+}
+
+
 /**
  * Missing parameter error message.
  *
@@ -424,8 +436,7 @@ int main( int argc, char** argv )
       const auto error_values = SHG::getScalarsAbsoluteDifference( measured_values, expected_values );
       const auto max_error    = vm[ "max-error" ].as<double>();
       const auto stat_error   = SHG::getStatistic( error_values );
-      const auto error_cmap   = SH::getColorMap( 0.0, max_error,
-						 params( "colormap", "Custom" ) );
+      const auto error_cmap   = getErrorColorMap( max_error );
       for ( SH::Idx i = 0; i < colors.size(); i++ )
 	colors[ i ] = error_cmap( error_values[ match[ i ] ] ); 
       SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
