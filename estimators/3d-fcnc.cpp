@@ -124,13 +124,16 @@ int main( int argc, char** argv )
     ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), and HII and GII are the mean and gaussian curvatures estimated by II." )
     ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." );
   EH::optionsDisplayValues   ( general_opt );
+  general_opt.add_options()
+    ( "zero-tic", po::value<double>()->default_value( 0.0 ), "adds a black band around zero of given thickness in colormaps." );
+
   //#endif
   general_opt.add_options()
     ( "error", po::value<std::string>()->default_value( "error.txt" ), "the name of the output file that sum up l2 and loo errors in estimation." );
   general_opt.add_options()
     ( "max-error", po::value<double>()->default_value( 0.2 ), "the error value corresponding to black." );
   general_opt.add_options()
-    ( "output,o", po::value<std::string>()->default_value( "fcnc" ), "the basename for output obj files." );
+    ( "output,o", po::value<std::string>()->default_value( "none" ), "the basename for output obj files or none if no output obj is wanted." );
   
   po::variables_map vm;
   bool parseOK = EH::args2vm( general_opt, argc, argv, vm );
@@ -397,52 +400,59 @@ int main( int argc, char** argv )
       trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
       time_curv_estimations = trace.endBlock();
     }
-
-  trace.beginBlock( "Save results as OBJ" );
-  const bool has_ground_truth = expected_values.size() != 0;
-  const bool has_estimations  = measured_values.size() != 0;
-  const auto minValue         = vm[ "minValue" ].as<double>();
-  const auto maxValue         = vm[ "maxValue" ].as<double>();
-  const auto colormap_name    = vm[ "colormap" ].as<string>();
+  
   const auto outputfile       = vm[ "output"   ].as<string>();
-  const auto colormap         = SH::getColorMap( minValue, maxValue, colormap_name );
-
-  trace.info() << "#mvalues=" << measured_values.size() << std::endl;
-  trace.info() << "#evalues=" << expected_values.size() << std::endl;
-
-  trace.beginBlock( "Compute surfels" );
-  params( "surfaceTraversal", "Default" );
-  const auto surfels = SH::getSurfelRange( surface, params );
-  const auto match   = SH::getRangeMatch ( surfels, dft_surfels );
-  trace.endBlock();
-
-  auto colors = SH::Colors( surfels.size() );
-  if ( has_ground_truth )
+  if ( outputfile != "none" )
     {
-      for ( SH::Idx i = 0; i < colors.size(); i++ )
-	colors[ i ] = colormap( expected_values[ match[ i ] ] ); 
-      SH::saveOBJ( surface, SH::getMatchedRange( expected_normals, match ), colors,
-		   outputfile+"-truth.obj" );
+      trace.beginBlock( "Save results as OBJ" );
+      const bool has_ground_truth = expected_values.size() != 0;
+      const bool has_estimations  = measured_values.size() != 0;
+      const auto minValue         = vm[ "minValue" ].as<double>();
+      const auto maxValue         = vm[ "maxValue" ].as<double>();
+      const auto colormap_name    = vm[ "colormap" ].as<string>();
+      const auto zt               = vm[ "zero-tic" ].as<double>();
+      const auto colormap         = SH::getZeroTicColorMap( minValue, maxValue,
+                                                            params( "colormap", colormap_name )
+                                                            ( "zero-tic", zt ) );
+      
+      trace.info() << "#mvalues=" << measured_values.size() << std::endl;
+      trace.info() << "#evalues=" << expected_values.size() << std::endl;
+
+      trace.beginBlock( "Compute surfels" );
+      params( "surfaceTraversal", "Default" );
+      const auto surfels = SH::getSurfelRange( surface, params );
+      const auto match   = SH::getRangeMatch ( surfels, dft_surfels );
+      trace.endBlock();
+      
+      auto colors = SH::Colors( surfels.size() );
+      if ( has_ground_truth )
+	{
+	  for ( SH::Idx i = 0; i < colors.size(); i++ )
+	    colors[ i ] = colormap( expected_values[ match[ i ] ] ); 
+	  SH::saveOBJ( surface, SH::getMatchedRange( expected_normals, match ), colors,
+		       outputfile+"-truth.obj" );
+	}
+      if ( has_estimations )
+	{
+	  for ( SH::Idx i = 0; i < colors.size(); i++ )
+	    colors[ i ] = colormap( measured_values[ match[ i ] ] ); 
+	  SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
+		       outputfile+"-estimation.obj" );
+	}
+      if ( has_ground_truth && has_estimations )
+	{
+	  const auto error_values = SHG::getScalarsAbsoluteDifference( measured_values, expected_values );
+	  const auto max_error    = vm[ "max-error" ].as<double>();
+	  const auto stat_error   = SHG::getStatistic( error_values );
+	  const auto error_cmap   = getErrorColorMap( max_error );
+	  for ( SH::Idx i = 0; i < colors.size(); i++ )
+	    colors[ i ] = error_cmap( error_values[ match[ i ] ] ); 
+	  SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
+		       outputfile+"-error.obj" );
+	}
+      trace.endBlock();
     }
-  if ( has_estimations )
-    {
-      for ( SH::Idx i = 0; i < colors.size(); i++ )
-	colors[ i ] = colormap( measured_values[ match[ i ] ] ); 
-      SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
-		   outputfile+"-estimation.obj" );
-    }
-  if ( has_ground_truth && has_estimations )
-    {
-      const auto error_values = SHG::getScalarsAbsoluteDifference( measured_values, expected_values );
-      const auto max_error    = vm[ "max-error" ].as<double>();
-      const auto stat_error   = SHG::getStatistic( error_values );
-      const auto error_cmap   = getErrorColorMap( max_error );
-      for ( SH::Idx i = 0; i < colors.size(); i++ )
-	colors[ i ] = error_cmap( error_values[ match[ i ] ] ); 
-      SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
-		   outputfile+"-error.obj" );
-    }
-  trace.endBlock();
+  
   
   if ( ! vm.count( "polynomial" ) ) return 0;
   
@@ -472,7 +482,7 @@ int main( int argc, char** argv )
        << " m_mean(6) m_dev(7) m_min(8) m_max(9)"
        << " exp_mean(10) exp_dev(11) exp_min(12) exp_max(13) " << std::endl;
   ferr << "# mr(14) mrd(15) t_curv_gt(16) t_normal_est(17) t_curv_est(18) t_mu_est(19)"
-       << " r-radius(20)"
+       << " r-radius(20) m-coef(21)"
        << std::endl;
   ferr << h << " " << measured_values.size()
        << " " << SHG::getScalarsNormL1 ( measured_values, expected_values )
@@ -490,6 +500,7 @@ int main( int argc, char** argv )
        << " " << time_normal_estimations << " " << time_curv_estimations
        << " " << time_mu_estimations
        << " " << vm[ "r-radius" ].as<double>()
+       << " " << vm[ "m-coef" ].as<double>()
        << std::endl;
   ferr << "#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
        << std::endl;
