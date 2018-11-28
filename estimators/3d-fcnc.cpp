@@ -118,6 +118,9 @@ int main( int argc, char** argv )
   EH::optionsImplicitShape   ( general_opt );
   EH::optionsDigitizedShape  ( general_opt );
   EH::optionsVolFile         ( general_opt );
+  general_opt.add_options()
+    ( "thresholdMin,m", po::value<int>()->default_value( 0 ), "the minimum value for thresholding the vol file." )
+    ( "thresholdMax,M", po::value<int>()->default_value( 255 ), "the maximum value for thresholding the vol file." );
   EH::optionsNoisyImage      ( general_opt );
   EH::optionsNormalEstimators( general_opt );
   general_opt.add_options()
@@ -215,7 +218,7 @@ int main( int argc, char** argv )
       // Fill useful parameters
       params( "thresholdMin", vm[ "thresholdMin" ].as<int>() );
       params( "thresholdMax", vm[ "thresholdMax" ].as<int>() );
-      params( "closed",       vm[ "closed"       ].as<int>()    );
+      params( "closed",       true );
       auto volfile = vm[ "input" ].as<string>();
       bimage       = SH::makeBinaryImage( volfile, params );
       K            = SH::getKSpace( bimage, params );
@@ -411,9 +414,9 @@ int main( int argc, char** argv )
       const auto maxValue         = vm[ "maxValue" ].as<double>();
       const auto colormap_name    = vm[ "colormap" ].as<string>();
       const auto zt               = vm[ "zero-tic" ].as<double>();
-      const auto colormap         = SH::getZeroTicColorMap( minValue, maxValue,
-                                                            params( "colormap", colormap_name )
-                                                            ( "zero-tic", zt ) );
+      const auto colormap         = SH::getZeroTickedColorMap( minValue, maxValue,
+                                                               params( "colormap", colormap_name )
+                                                               ( "zero-tic", zt ) );
       
       trace.info() << "#mvalues=" << measured_values.size() << std::endl;
       trace.info() << "#evalues=" << expected_values.size() << std::endl;
