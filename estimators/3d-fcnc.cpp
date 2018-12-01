@@ -109,7 +109,7 @@ int main( int argc, char** argv )
   EH::optionsNoisyImage      ( general_opt );
   EH::optionsNormalEstimators( general_opt );
   general_opt.add_options()
-    ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), and HII and GII are the mean and gaussian curvatures estimated by II." )
+    ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|Aniso|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), Aniso is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." )
     ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." );
   EH::optionsDisplayValues   ( general_opt );
   //#endif
@@ -152,9 +152,9 @@ int main( int argc, char** argv )
       return 0;
     }
   auto quantity = vm[ "quantity" ].as<std::string>();
-  std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "HII", "GII" };
+  std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "Aniso", "HII", "GII" };
   if ( std::count( quantities.begin(), quantities.end(), quantity ) == 0 ) {
-    trace.error() << "Quantity should be in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|HII|GII.";
+    trace.error() << "Quantity should be in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|Aniso|HII|GII.";
     trace.info() << std::endl;
     return 0;
   }
@@ -185,6 +185,7 @@ int main( int argc, char** argv )
   trace.info() << params << std::endl;
   if ( vm.count( "polynomial" ) )
     {
+      std::cout << "Polynomial" << std::endl;
       // Fill useful parameters
       params( "polynomial", vm[ "polynomial" ].as<string>() );
       params( "minAABB",    vm[ "minAABB"    ].as<double>() );
@@ -197,11 +198,16 @@ int main( int argc, char** argv )
     }
   else if ( vm.count( "input" ) )
     {
+      std::cout << "Input" << std::endl;
       // Fill useful parameters
       params( "thresholdMin", vm[ "thresholdMin" ].as<int>() );
+      std::cout << "thresholdMin" << std::endl;
       params( "thresholdMax", vm[ "thresholdMax" ].as<int>() );
-      params( "closed",       vm[ "closed"       ].as<int>()    );
+      std::cout << "thresholdMax" << std::endl;
+      params( "closed",       1 );
+      std::cout << "closed" << std::endl;
       auto volfile = vm[ "input" ].as<string>();
+      std::cout << "input" << std::endl;
       bimage       = SH::makeBinaryImage( volfile, params );
       K            = SH::getKSpace( bimage, params );
     }
@@ -214,6 +220,7 @@ int main( int argc, char** argv )
 		 [&nb] ( bool v ) { nb += v ? 1 : 0; } );
   trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
   
+  auto embedder    = SH::getSCellEmbedder( K );
   auto surface     = SH::makeDigitalSurface( bimage, K, params );
   auto idx_surface = SH::makeIdxDigitalSurface( surface );
   if ( surface == 0 ) {
@@ -225,6 +232,7 @@ int main( int argc, char** argv )
   trace.info() << "- surface has " << surface->size()<< " surfels." << std::endl;
   trace.endBlock();
 
+  auto outputfile    = vm[ "output"   ].as<string>();
   auto estimator     = vm[ "estimator" ].as<string>();
   const double h     = vm[ "gridstep"  ].as<double>();
   const double mcoef = vm[ "m-coef"    ].as<double>();
@@ -308,10 +316,14 @@ int main( int argc, char** argv )
       std::vector<double> mu1( dft_surfels.size() );
       std::vector<double> mu2( dft_surfels.size() );
       std::vector<double> muOmega( dft_surfels.size() );
+      SH::RealVectors     muDir0( dft_surfels.size() );
+      SH::RealVectors     muDir1( dft_surfels.size() );
+      SH::RealVectors     muDir2( dft_surfels.size() );
       bool       mu0_needed = true;
       bool       mu1_needed = false;
       bool       mu2_needed = false;
       bool   muOmega_needed = false;
+      bool   muAniso_needed = false;
       if ( quantity == "Mu0" )     mu0_needed = true;
       if ( quantity == "Mu1" )     mu1_needed = true;
       if ( quantity == "Mu2" )     mu2_needed = true;
@@ -319,6 +331,7 @@ int main( int argc, char** argv )
       if ( quantity == "H" )       mu0_needed = mu1_needed = true;
       if ( quantity == "G" )       mu0_needed = mu2_needed = true;
       if ( quantity == "Omega" )   mu0_needed = muOmega_needed = true;
+      if ( quantity == "Aniso" )   muAniso_needed = true;
       trace.beginBlock( "Compute mu_k everywhere" );
       trace.info() << "computeAllMu0" << std::endl;
       if ( mu0_needed ) C.computeAllMu0();
@@ -328,6 +341,8 @@ int main( int argc, char** argv )
       if ( mu2_needed ) C.computeAllMu2();
       trace.info() << "computeAllMuOmega" << std::endl;
       if ( muOmega_needed ) C.computeAllMuOmega();
+      trace.info() << "computeAllMuAnisotropic" << std::endl;
+      if ( muAniso_needed ) C.computeAllAnisotropicMu();
       time_mu_estimations = trace.endBlock();
       //#pragma omp parallel for schedule(dynamic)
       trace.info() << "compute measures" << std::endl;
@@ -343,6 +358,18 @@ int main( int argc, char** argv )
 	  if ( mu1_needed ) mu1[ i ] = C.mu1Ball( v, mr );
 	  if ( mu2_needed ) mu2[ i ] = C.mu2Ball( v, mr );
 	  if ( muOmega_needed ) muOmega[ i ] = C.muOmegaBall( v, mr );
+	  if ( muAniso_needed ) {
+	    auto M = C.anisotropicMuBall( v, mr );
+	    auto V = M;
+	    RealVector L;
+	    trace.info() << M( 0, 0 ) << " "<< M( 0, 1 ) << " "<< M( 0, 2 ) << std::endl;
+	    trace.info() << M( 1, 0 ) << " "<< M( 1, 1 ) << " "<< M( 1, 2 ) << std::endl;
+	    trace.info() << M( 2, 0 ) << " "<< M( 2, 1 ) << " "<< M( 2, 2 ) << std::endl;
+	    EigenDecomposition< 3, double>::getEigenDecomposition( M, V, L );
+	    muDir0[ i ] = V.column( 0 );
+	    muDir1[ i ] = V.column( 1 );
+	    muDir2[ i ] = V.column( 2 );
+	  }
 	  ++i;
 	}
       // Computing total Gauss curvature.
@@ -384,6 +411,20 @@ int main( int argc, char** argv )
       trace.info() << "- CNC curv: min = " << stat_measured_curv.min() << std::endl;
       trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
       time_curv_estimations = trace.endBlock();
+      if ( quantity == "Aniso" ) {
+	std::string fdir0 = outputfile + "-dir0";
+	std::string fdir1 = outputfile + "-dir0";
+	std::string fdir2 = outputfile + "-dir0";
+	SH::RealPoints positions( dft_surfels.size() );
+	std::transform( dft_surfels.cbegin(), dft_surfels.cend(), positions.begin(),
+			[&] (const SH::SCell& c) { return embedder( c ); } ); 
+	SH::saveOBJ( positions, muDir0, 0.05, SH::Colors(),
+		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Red );
+	SH::saveOBJ( positions, muDir1, 0.05, SH::Colors(),
+		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Green );
+	SH::saveOBJ( positions, muDir2, 0.05, SH::Colors(),
+		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Blue );
+      }
     }
 
   trace.beginBlock( "Save results as OBJ" );
@@ -392,7 +433,7 @@ int main( int argc, char** argv )
   const auto minValue         = vm[ "minValue" ].as<double>();
   const auto maxValue         = vm[ "maxValue" ].as<double>();
   const auto colormap_name    = vm[ "colormap" ].as<string>();
-  const auto outputfile       = vm[ "output"   ].as<string>();
+  // const auto outputfile       = vm[ "output"   ].as<string>();
   const auto colormap         = SH::getColorMap( minValue, maxValue, colormap_name );
 
   trace.info() << "#mvalues=" << measured_values.size() << std::endl;

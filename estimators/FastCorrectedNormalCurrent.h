@@ -46,6 +46,8 @@
 #include "DGtal/topology/CDigitalSurfaceContainer.h"
 #include "DGtal/topology/IndexedDigitalSurface.h"
 #include "DGtal/graph/DistanceBreadthFirstVisitor.h"
+#include "DGtal/math/linalg/SimpleMatrix.h"
+#include "DGtal/math/linalg/EigenDecomposition.h"
 #include "SphericalTriangle.h"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -96,7 +98,9 @@ namespace DGtal
     typedef std::vector< RealVector >                 NormalVectorField;
     typedef std::vector< RealPoint >                  CentroidMap;
     typedef std::vector< Scalar >                     MeasureMap;
-
+    typedef SimpleMatrix< Scalar, 3, 3 >              RealTensor;
+    typedef std::vector< RealTensor >                 TensorMeasureMap;
+    
     // Checks that dimension is 3.
     BOOST_STATIC_ASSERT(( KSpace::dimension == 3 ));
     
@@ -306,7 +310,15 @@ namespace DGtal
       auto arcs = theSurface->allArcs();
       for ( auto a : arcs ) myMuOmega[ a ] = computeMuOmega( a );
     }
-    
+
+    /// Computes all anisotropic measures per arc.
+    void computeAllAnisotropicMu()
+    {
+      myAnisotropicMu.resize( theSurface->nbArcs() );
+      auto arcs = theSurface->allArcs();
+      for ( auto a : arcs ) myAnisotropicMu[ a ] = computeAnisotropicMu( a );
+    }
+
 
     // ----------------------- Indexed Digital Surface services --------------------------
   public:
@@ -479,19 +491,24 @@ namespace DGtal
     {
       return myMu1[ arc ];
     }
-    
-    /// \f$ \mu_1 \f$ Lipschitz-Killing measure. It corresponds to a
-    /// measure of mean curvature, since normal vectors may turn
-    /// around an edge, and is non null only on 1-cells (or Arc). The
-    /// measure is oriented, but gives the same result of an arc and
-    /// its opposite.
-    ///
-    /// @param[in] a any arc (ie a 1-cell in-between two 2-cells on 3D digital
-    /// surfaces).
-    ///
-    /// @return the corrected mean curvature measure \f$ \mu_1 := \Psi
-    /// \vec{e} \cdot \vec{e}_1 d\mathcal{H}^1 \f$.
-    Scalar computeMu1( Arc arc )
+
+    /// Contains all the information necessary to compute
+    /// lipschitz-killing measures mu_k along a given arc.
+    struct LocalArcInformation
+    {
+      Arc        arc; ///< the arc under interest
+      RealVector ui;  ///< the corrected normal vecteur to the left of the arc
+      RealVector uj;  ///< the corrected normal vecteur to the right of the arc
+      RealVector e;   ///< the unit vector along the linel
+      RealVector e1;  ///< u_i x u_j / || u_i x u_j ||
+      Scalar     psi; ///< the dihedral angle from u_i to u_j
+    };
+
+    /// Computes all the information necessary to compute
+    /// lipschitz-killing measures mu_k along a given arc.
+    /// @param[out] lai the useful curvature information for the given \a arc
+    /// @param[in]  arc any arc.
+    void computeLocalArcInformation( LocalArcInformation& lai, Arc arc )
     {
       const KSpace & K = space();
       Vertex   si_plus = theSurface->tail( arc );
@@ -508,23 +525,31 @@ namespace DGtal
       Cell       pivot = K.unsigns( theSurface->pointel( faces[ 0 ] ) );
       if ( pivot != pta ) std::swap( pta, ptb );
       RealPoint      a = computeCentroid( pta );
-      RealVector     e = ( computeCentroid( ptb ) - a ).getNormalized();
-      RealPoint     s0 = myVertexCentroids[ si_plus ];
-      RealPoint     s1 = myVertexCentroids[ si_minus ];
-      // s_plus must be to the left of e.
-      // if ( e.crossProduct( s0 - a ).dot( myTrivialNormals[ s_plus ] ) < 0.0 )
-      // 	   std::swap( s_plus, s_minus );
-      // Computes u_+ and u_-, then their cross product.
-      RealVector    u_p = myCorrectedNormals[ si_plus ];
-      RealVector    u_m = myCorrectedNormals[ si_minus ];
-      RealVector psi_e1 = u_p.crossProduct( u_m );
-      Scalar        ne1 = psi_e1.norm();
-      Scalar       npsi = (ne1 == 0.0) ? 0.0 : ( asin( ne1 ) / ne1 );
-      return  Hmeasure( 1 ) * npsi * e.dot( psi_e1 );
-      // RealVector u_cross = u_p.crossProduct( u_m );
-      // Scalar         psi = asin( fabs( u_cross ) );
-      // RealVector      e1 = u_cross.getNormalized();
-      // return  psi * e.dot( e1 );
+      lai.e            = ( computeCentroid( ptb ) - a ).getNormalized();
+      lai.ui           = myCorrectedNormals[ si_plus ];
+      lai.uj           = myCorrectedNormals[ si_minus ];
+      RealVector  u_e1 = lai.ui.crossProduct( lai.uj );
+      Scalar       ne1 = std::min( u_e1.norm(), 1.0 );
+      lai.e1           = (ne1 != 0.0 ) ? ( u_e1 / ne1 ) : lai.e;
+      lai.psi          = asin( ne1 );
+    }
+
+    /// \f$ \mu_1 \f$ Lipschitz-Killing measure. It corresponds to a
+    /// measure of mean curvature, since normal vectors may turn
+    /// around an edge, and is non null only on 1-cells (or Arc). The
+    /// measure is oriented, but gives the same result of an arc and
+    /// its opposite.
+    ///
+    /// @param[in] a any arc (ie a 1-cell in-between two 2-cells on 3D digital
+    /// surfaces).
+    ///
+    /// @return the corrected mean curvature measure \f$ \mu_1 := \Psi
+    /// \vec{e} \cdot \vec{e}_1 d\mathcal{H}^1 \f$.
+    Scalar computeMu1( Arc arc )
+    {
+      LocalArcInformation info;
+      computeLocalArcInformation( info, arc );
+      return  Hmeasure( 1 ) * info.psi * info.e.dot( info.e1 );
     }
 
     /// \f$ \mu_2 \f$ Lipschitz-Killing measure. It corresponds to a
@@ -636,6 +661,63 @@ namespace DGtal
       return  Hmeasure( 1 ) * e.dot( u_p - u_m );
     }
 
+    /// Computes the anisotropic measure mu_XY according to the
+    /// information \a lai and to the directions \a X and \a Y.
+    ///
+    /// @param lai the local curvature measure of an arc.
+    /// @param X any direction
+    /// @param Y any direction
+    Scalar getMuXY( const LocalArcInformation& lai, RealVector X, RealVector Y )
+    {
+      RealVector       X_x_e = X.crossProduct( lai.e );
+      RealVector     e1_x_ui = lai.e1.crossProduct( lai.ui );
+      Scalar          Y_d_ui = Y.dot( lai.ui );
+      Scalar      X_x_e_d_ui = X_x_e.dot( lai.ui );
+      Scalar     Y_d_e1_x_ui = Y.dot( e1_x_ui );
+      Scalar X_x_e_d_e1_x_ui = X_x_e.dot( e1_x_ui );
+      Scalar         sin_psi = sin( lai.psi );
+      Scalar        sin_2psi = sin( 2.0*lai.psi );
+      Scalar m = ( lai.psi + sin_2psi ) * X_x_e_d_e1_x_ui*Y_d_ui
+	- ( sin_2psi - lai.psi ) * X_x_e_d_ui*Y_d_e1_x_ui
+	+ sin_psi * sin_psi * ( X_x_e_d_ui*Y_d_ui - X_x_e_d_e1_x_ui*Y_d_e1_x_ui );
+      return 0.5 * m;
+    }
+
+    /// Anisotropic curvature measure. It is a 3x3 tensor that more or
+    /// less describes the curvature tensor.
+    ///
+    /// @param[in] arc any arc (ie a 1-cell in-between two 2-cells on 3D digital
+    /// surfaces).
+    ///
+    /// @return the anisotropic curvature measure along the \a arc.
+    RealTensor computeAnisotropicMu( Arc arc )
+    {
+      LocalArcInformation info;
+      computeLocalArcInformation( info, arc );
+      RealTensor T;
+      Scalar h = Hmeasure( 1 ); 
+      for ( Dimension i = 0; i < 3; ++i ) {
+	RealVector X = RealVector::base( i, 1.0 );
+	for ( Dimension j = 0; j < 3; ++j ) {
+	  RealVector Y = RealVector::base( j, 1.0 );
+	  T.setComponent( i, j, h * getMuXY( info, X, Y ) );
+	}
+      }
+      return T;
+    }
+    
+    /// Anisotropic curvature measure. It is a 3x3 tensor that more or
+    /// less describes the curvature tensor.
+    ///
+    /// @param[in] arc any arc (ie a 1-cell in-between two 2-cells on 3D digital
+    /// surfaces).
+    ///
+    /// @return the anisotropic curvature measure along the \a arc.
+    RealTensor anisotropicMu( Arc arc )
+    {
+      return myAnisotropicMu[ arc ];
+    }
+      
     
     Scalar mu0( RealPoint p, Scalar r, Vertex c )
     {
@@ -672,6 +754,16 @@ namespace DGtal
 	: sRelativeIntersection( p, r, aLinel );
       return ri != 0.0 ? ri * muOmega( a ) : 0.0;
     }
+
+    RealTensor anisotropicMu( RealPoint p, Scalar r, Arc a )
+    {
+      SCell aLinel = theSurface->linel( a ); // oriented 1-cell
+      Scalar    ri = myCrisp
+	? sCrispIntersection( p, r, aLinel )
+	: sRelativeIntersection( p, r, aLinel );
+      return ( ri != 0.0 ) ? ( ri * anisotropicMu( a ) ) : RealTensor();
+    }
+
     
     struct SquaredDistance2Point {
       typedef Scalar Value;
@@ -786,6 +878,17 @@ namespace DGtal
       }
       return m1;
     }
+
+    RealTensor anisotropicMuBall( Vertex vc, Scalar r )
+    {
+      ArcRange    arcs = getArcsInBall( vc, r );
+      RealTensor    mT = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, };
+      RealPoint      x = myVertexCentroids[ vc ];
+      for ( auto a : arcs ) {
+	mT      += anisotropicMu( x, r, a ); 
+      }
+      return mT;
+    }
     
     // ----------------------- Interface --------------------------------------
   public:
@@ -831,6 +934,8 @@ namespace DGtal
     MeasureMap               myMu2;
     /// The map Arc -> muOmega
     MeasureMap               myMuOmega;
+    /// The map Arc -> AnisotropicMu
+    TensorMeasureMap         myAnisotropicMu;
     
     // ------------------------- Hidden services ------------------------------
   protected:
