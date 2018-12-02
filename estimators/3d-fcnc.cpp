@@ -118,9 +118,9 @@ int main( int argc, char** argv )
   EH::optionsImplicitShape   ( general_opt );
   EH::optionsDigitizedShape  ( general_opt );
   EH::optionsVolFile         ( general_opt );
-  general_opt.add_options()
-    ( "thresholdMin,m", po::value<int>()->default_value( 0 ), "the minimum value for thresholding the vol file." )
-    ( "thresholdMax,M", po::value<int>()->default_value( 255 ), "the maximum value for thresholding the vol file." );
+  // general_opt.add_options()
+  //   ( "thresholdMin,m", po::value<int>()->default_value( 0 ), "the minimum value for thresholding the vol file." )
+  //   ( "thresholdMax,M", po::value<int>()->default_value( 255 ), "the maximum value for thresholding the vol file." );
   EH::optionsNoisyImage      ( general_opt );
   EH::optionsNormalEstimators( general_opt );
   general_opt.add_options()
@@ -372,14 +372,27 @@ int main( int argc, char** argv )
 	  if ( muOmega_needed ) muOmega[ i ] = C.muOmegaBall( v, mr );
 	  if ( muAniso_needed ) {
 	    auto M = C.anisotropicMuBall( v, mr );
+	    auto N = measured_normals[ i ];
+	    M += M.transpose();
+	    M *= 0.5;
+	    for ( int j = 0; j < 3; j++ )
+	      for ( int k = 0; k < 3; k++ )
+		M( j, k ) += 100.0 * N[ j ] * N[ k ];
 	    auto V = M;
 	    RealVector L;
-	    trace.info() << M( 0, 0 ) << " "<< M( 0, 1 ) << " "<< M( 0, 2 ) << std::endl;
-	    trace.info() << M( 1, 0 ) << " "<< M( 1, 1 ) << " "<< M( 1, 2 ) << std::endl;
-	    trace.info() << M( 2, 0 ) << " "<< M( 2, 1 ) << " "<< M( 2, 2 ) << std::endl;
+	    // trace.info() << M( 0, 0 ) << " "<< M( 0, 1 ) << " "<< M( 0, 2 ) << std::endl;
+	    // trace.info() << M( 1, 0 ) << " "<< M( 1, 1 ) << " "<< M( 1, 2 ) << std::endl;
+	    // trace.info() << M( 2, 0 ) << " "<< M( 2, 1 ) << " "<< M( 2, 2 ) << std::endl;
 	    EigenDecomposition< 3, double>::getEigenDecomposition( M, V, L );
-	    muDir0[ i ] = V.column( 0 );
-	    muDir1[ i ] = V.column( 1 );
+	    //trace.info() << L[ 0 ] << " " << L[ 1 ] << " " << L[ 2 ] << std::endl;
+	    auto lmax = std::max( fabs( L[ 0 ] ), fabs( L[ 1 ] ) );
+	    //trace.info() << "lmax=" << lmax << std::endl;
+	    L[ 0 ] = fabs( L[ 0 ] );
+	    L[ 1 ] = fabs( L[ 1 ] );
+	    auto j = L[ 0 ] > L[ 1 ] ? 0 : 1;
+	    if ( L [ j ] > 1.0 ) { L[ 1-j ] /= L[ j ]; L[ j ] = 1.0;  } 
+	    muDir0[ i ] = L[ j ] * V.column( j );
+	    muDir1[ i ] = L[ 1-j ] * V.column( 1-j );
 	    muDir2[ i ] = V.column( 2 );
 	  }
 	  ++i;
@@ -415,27 +428,38 @@ int main( int argc, char** argv )
 			  muOmega.cbegin(), measured_values.begin(),
 			  [] ( double m0, double m2 ) { return m2 / sqrt( m0 ); } );
 	}
-      for ( i = 0; i < j; ++i ) stat_measured_curv.addValue( measured_values[ i ] );
-      stat_measured_curv.terminate();
-      trace.info() << "- CNC area      = " << area << std::endl;
-      trace.info() << "- CNC total G   = " << intG << std::endl;
-      trace.info() << "- CNC curv: avg = " << stat_measured_curv.mean() << std::endl;
-      trace.info() << "- CNC curv: min = " << stat_measured_curv.min() << std::endl;
-      trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
+      if ( quantity != "Aniso" )
+	{
+	  for ( i = 0; i < j; ++i ) stat_measured_curv.addValue( measured_values[ i ] );
+	  stat_measured_curv.terminate();
+	  trace.info() << "- CNC area      = " << area << std::endl;
+	  trace.info() << "- CNC total G   = " << intG << std::endl;
+	  trace.info() << "- CNC curv: avg = " << stat_measured_curv.mean() << std::endl;
+	  trace.info() << "- CNC curv: min = " << stat_measured_curv.min() << std::endl;
+	  trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
+	}
       time_curv_estimations = trace.endBlock();
       if ( quantity == "Aniso" ) {
 	std::string fdir0 = outputfile + "-dir0";
-	std::string fdir1 = outputfile + "-dir0";
-	std::string fdir2 = outputfile + "-dir0";
+	std::string fdir1 = outputfile + "-dir1";
+	std::string fdir2 = outputfile + "-dir2";
 	SH::RealPoints positions( dft_surfels.size() );
 	std::transform( dft_surfels.cbegin(), dft_surfels.cend(), positions.begin(),
-			[&] (const SH::SCell& c) { return embedder( c ); } ); 
-	SH::saveOBJ( positions, muDir0, 0.05, SH::Colors(),
+			[&] (const SH::SCell& c) { return embedder( c ); } );
+	auto pos0 = positions;
+	auto pos1 = positions;
+	auto pos2 = positions;
+	for ( SH::Idx i = 0; i < pos0.size(); ++i ) {
+	  pos0[ i ] -= 0.5 * muDir0[ i ];
+	  pos1[ i ] -= 0.5 * muDir1[ i ];
+	  pos2[ i ] -= 0.5 * muDir2[ i ];
+	}
+	SH::saveOBJ( pos0, muDir0, 0.05, SH::Colors(),
 		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Red );
-	SH::saveOBJ( positions, muDir1, 0.05, SH::Colors(),
-		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Green );
-	SH::saveOBJ( positions, muDir2, 0.05, SH::Colors(),
-		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Blue );
+	SH::saveOBJ( pos1, muDir1, 0.05, SH::Colors(),
+		     fdir1, SH::Color( 0, 0, 0 ), SH::Color::Green );
+	SH::saveOBJ( pos2, muDir2, 0.05, SH::Colors(),
+		     fdir2, SH::Color( 0, 0, 0 ), SH::Color::Blue );
       }
     }
   
