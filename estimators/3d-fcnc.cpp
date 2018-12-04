@@ -360,6 +360,7 @@ int main( int argc, char** argv )
       trace.info() << "compute measures" << std::endl;
       Vertex              i = 0;
       Vertex              j = dft_surfels.size();
+      const bool M_times_Mt = true;
       for ( auto aSurfel : dft_surfels )
 	{
 	  // std::cout << i << " / " << j << std::endl;
@@ -370,7 +371,7 @@ int main( int argc, char** argv )
 	  if ( mu1_needed ) mu1[ i ] = C.mu1Ball( v, mr );
 	  if ( mu2_needed ) mu2[ i ] = C.mu2Ball( v, mr );
 	  if ( muOmega_needed ) muOmega[ i ] = C.muOmegaBall( v, mr );
-	  if ( muAniso_needed ) {
+	  if ( muAniso_needed && ! M_times_Mt ) {
 	    auto M = C.anisotropicMuBall( v, mr );
 	    auto N = measured_normals[ i ];
 	    M += M.transpose();
@@ -380,13 +381,8 @@ int main( int argc, char** argv )
 		M( j, k ) += 100.0 * N[ j ] * N[ k ];
 	    auto V = M;
 	    RealVector L;
-	    // trace.info() << M( 0, 0 ) << " "<< M( 0, 1 ) << " "<< M( 0, 2 ) << std::endl;
-	    // trace.info() << M( 1, 0 ) << " "<< M( 1, 1 ) << " "<< M( 1, 2 ) << std::endl;
-	    // trace.info() << M( 2, 0 ) << " "<< M( 2, 1 ) << " "<< M( 2, 2 ) << std::endl;
 	    EigenDecomposition< 3, double>::getEigenDecomposition( M, V, L );
-	    //trace.info() << L[ 0 ] << " " << L[ 1 ] << " " << L[ 2 ] << std::endl;
 	    auto lmax = std::max( fabs( L[ 0 ] ), fabs( L[ 1 ] ) );
-	    //trace.info() << "lmax=" << lmax << std::endl;
 	    L[ 0 ] = fabs( L[ 0 ] );
 	    L[ 1 ] = fabs( L[ 1 ] );
 	    auto j = L[ 0 ] > L[ 1 ] ? 0 : 1;
@@ -394,6 +390,15 @@ int main( int argc, char** argv )
 	    muDir0[ i ] = L[ j ] * V.column( j );
 	    muDir1[ i ] = L[ 1-j ] * V.column( 1-j );
 	    muDir2[ i ] = V.column( 2 );
+	  } else if ( muAniso_needed && M_times_Mt ) {
+	    auto M = C.anisotropicMuBall( v, mr );
+	    auto MMt = M * M.transpose();
+	    auto V = M;
+	    RealVector L;
+	    EigenDecomposition< 3, double>::getEigenDecomposition( MMt, V, L );
+	    muDir0[ i ] = sqrt( fabs( L[ 0 ] ) ) * V.column( 0 );
+	    muDir1[ i ] = sqrt( fabs( L[ 1 ] ) ) * V.column( 1 );
+	    muDir2[ i ] = sqrt( fabs( L[ 2 ] ) ) * V.column( 2 );
 	  }
 	  ++i;
 	}
@@ -454,6 +459,8 @@ int main( int argc, char** argv )
 	  pos1[ i ] -= 0.5 * muDir1[ i ];
 	  pos2[ i ] -= 0.5 * muDir2[ i ];
 	}
+	SH::saveOBJ( surface, SH::RealVectors(), SH::Colors(),
+		     outputfile+"-primal.obj" );
 	SH::saveOBJ( pos0, muDir0, 0.05, SH::Colors(),
 		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Red );
 	SH::saveOBJ( pos1, muDir1, 0.05, SH::Colors(),
