@@ -118,13 +118,13 @@ int main( int argc, char** argv )
   EH::optionsImplicitShape   ( general_opt );
   EH::optionsDigitizedShape  ( general_opt );
   EH::optionsVolFile         ( general_opt );
-  general_opt.add_options()
-    ( "thresholdMin,m", po::value<int>()->default_value( 0 ), "the minimum value for thresholding the vol file." )
-    ( "thresholdMax,M", po::value<int>()->default_value( 255 ), "the maximum value for thresholding the vol file." );
+  // general_opt.add_options()
+  //   ( "thresholdMin,m", po::value<int>()->default_value( 0 ), "the minimum value for thresholding the vol file." )
+  //   ( "thresholdMax,M", po::value<int>()->default_value( 255 ), "the maximum value for thresholding the vol file." );
   EH::optionsNoisyImage      ( general_opt );
   EH::optionsNormalEstimators( general_opt );
   general_opt.add_options()
-    ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), and HII and GII are the mean and gaussian curvatures estimated by II." )
+    ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|Aniso|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), Aniso is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." )
     ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." );
   EH::optionsDisplayValues   ( general_opt );
   general_opt.add_options()
@@ -170,9 +170,9 @@ int main( int argc, char** argv )
       return 0;
     }
   auto quantity = vm[ "quantity" ].as<std::string>();
-  std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "HII", "GII" };
+  std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "Aniso", "HII", "GII" };
   if ( std::count( quantities.begin(), quantities.end(), quantity ) == 0 ) {
-    trace.error() << "Quantity should be in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|HII|GII.";
+    trace.error() << "Quantity should be in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|Aniso|HII|GII.";
     trace.info() << std::endl;
     return 0;
   }
@@ -232,6 +232,7 @@ int main( int argc, char** argv )
 		 [&nb] ( bool v ) { nb += v ? 1 : 0; } );
   trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
   
+  auto embedder    = SH::getSCellEmbedder( K );
   auto surface     = SH::makeDigitalSurface( bimage, K, params );
   auto idx_surface = SH::makeIdxDigitalSurface( surface );
   if ( surface == 0 ) {
@@ -243,6 +244,7 @@ int main( int argc, char** argv )
   trace.info() << "- surface has " << surface->size()<< " surfels." << std::endl;
   trace.endBlock();
 
+  auto outputfile    = vm[ "output"   ].as<string>();
   auto estimator     = vm[ "estimator" ].as<string>();
   const double h     = vm[ "gridstep"  ].as<double>();
   const double mcoef = vm[ "m-coef"    ].as<double>();
@@ -326,10 +328,14 @@ int main( int argc, char** argv )
       std::vector<double> mu1( dft_surfels.size() );
       std::vector<double> mu2( dft_surfels.size() );
       std::vector<double> muOmega( dft_surfels.size() );
+      SH::RealVectors     muDir0( dft_surfels.size() );
+      SH::RealVectors     muDir1( dft_surfels.size() );
+      SH::RealVectors     muDir2( dft_surfels.size() );
       bool       mu0_needed = true;
       bool       mu1_needed = false;
       bool       mu2_needed = false;
       bool   muOmega_needed = false;
+      bool   muAniso_needed = false;
       if ( quantity == "Mu0" )     mu0_needed = true;
       if ( quantity == "Mu1" )     mu1_needed = true;
       if ( quantity == "Mu2" )     mu2_needed = true;
@@ -337,6 +343,7 @@ int main( int argc, char** argv )
       if ( quantity == "H" )       mu0_needed = mu1_needed = true;
       if ( quantity == "G" )       mu0_needed = mu2_needed = true;
       if ( quantity == "Omega" )   mu0_needed = muOmega_needed = true;
+      if ( quantity == "Aniso" )   muAniso_needed = true;
       trace.beginBlock( "Compute mu_k everywhere" );
       trace.info() << "computeAllMu0" << std::endl;
       if ( mu0_needed ) C.computeAllMu0();
@@ -346,6 +353,8 @@ int main( int argc, char** argv )
       if ( mu2_needed ) C.computeAllMu2();
       trace.info() << "computeAllMuOmega" << std::endl;
       if ( muOmega_needed ) C.computeAllMuOmega();
+      trace.info() << "computeAllMuAnisotropic" << std::endl;
+      if ( muAniso_needed ) C.computeAllAnisotropicMu();
       time_mu_estimations = trace.endBlock();
       //#pragma omp parallel for schedule(dynamic)
       trace.info() << "compute measures" << std::endl;
@@ -361,6 +370,31 @@ int main( int argc, char** argv )
 	  if ( mu1_needed ) mu1[ i ] = C.mu1Ball( v, mr );
 	  if ( mu2_needed ) mu2[ i ] = C.mu2Ball( v, mr );
 	  if ( muOmega_needed ) muOmega[ i ] = C.muOmegaBall( v, mr );
+	  if ( muAniso_needed ) {
+	    auto M = C.anisotropicMuBall( v, mr );
+	    auto N = measured_normals[ i ];
+	    M += M.transpose();
+	    M *= 0.5;
+	    for ( int j = 0; j < 3; j++ )
+	      for ( int k = 0; k < 3; k++ )
+		M( j, k ) += 100.0 * N[ j ] * N[ k ];
+	    auto V = M;
+	    RealVector L;
+	    // trace.info() << M( 0, 0 ) << " "<< M( 0, 1 ) << " "<< M( 0, 2 ) << std::endl;
+	    // trace.info() << M( 1, 0 ) << " "<< M( 1, 1 ) << " "<< M( 1, 2 ) << std::endl;
+	    // trace.info() << M( 2, 0 ) << " "<< M( 2, 1 ) << " "<< M( 2, 2 ) << std::endl;
+	    EigenDecomposition< 3, double>::getEigenDecomposition( M, V, L );
+	    //trace.info() << L[ 0 ] << " " << L[ 1 ] << " " << L[ 2 ] << std::endl;
+	    auto lmax = std::max( fabs( L[ 0 ] ), fabs( L[ 1 ] ) );
+	    //trace.info() << "lmax=" << lmax << std::endl;
+	    L[ 0 ] = fabs( L[ 0 ] );
+	    L[ 1 ] = fabs( L[ 1 ] );
+	    auto j = L[ 0 ] > L[ 1 ] ? 0 : 1;
+	    if ( L [ j ] > 1.0 ) { L[ 1-j ] /= L[ j ]; L[ j ] = 1.0;  } 
+	    muDir0[ i ] = L[ j ] * V.column( j );
+	    muDir1[ i ] = L[ 1-j ] * V.column( 1-j );
+	    muDir2[ i ] = V.column( 2 );
+	  }
 	  ++i;
 	}
       // Computing total Gauss curvature.
@@ -394,17 +428,41 @@ int main( int argc, char** argv )
 			  muOmega.cbegin(), measured_values.begin(),
 			  [] ( double m0, double m2 ) { return m2 / sqrt( m0 ); } );
 	}
-      for ( i = 0; i < j; ++i ) stat_measured_curv.addValue( measured_values[ i ] );
-      stat_measured_curv.terminate();
-      trace.info() << "- CNC area      = " << area << std::endl;
-      trace.info() << "- CNC total G   = " << intG << std::endl;
-      trace.info() << "- CNC curv: avg = " << stat_measured_curv.mean() << std::endl;
-      trace.info() << "- CNC curv: min = " << stat_measured_curv.min() << std::endl;
-      trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
+      if ( quantity != "Aniso" )
+	{
+	  for ( i = 0; i < j; ++i ) stat_measured_curv.addValue( measured_values[ i ] );
+	  stat_measured_curv.terminate();
+	  trace.info() << "- CNC area      = " << area << std::endl;
+	  trace.info() << "- CNC total G   = " << intG << std::endl;
+	  trace.info() << "- CNC curv: avg = " << stat_measured_curv.mean() << std::endl;
+	  trace.info() << "- CNC curv: min = " << stat_measured_curv.min() << std::endl;
+	  trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
+	}
       time_curv_estimations = trace.endBlock();
+      if ( quantity == "Aniso" ) {
+	std::string fdir0 = outputfile + "-dir0";
+	std::string fdir1 = outputfile + "-dir1";
+	std::string fdir2 = outputfile + "-dir2";
+	SH::RealPoints positions( dft_surfels.size() );
+	std::transform( dft_surfels.cbegin(), dft_surfels.cend(), positions.begin(),
+			[&] (const SH::SCell& c) { return embedder( c ); } );
+	auto pos0 = positions;
+	auto pos1 = positions;
+	auto pos2 = positions;
+	for ( SH::Idx i = 0; i < pos0.size(); ++i ) {
+	  pos0[ i ] -= 0.5 * muDir0[ i ];
+	  pos1[ i ] -= 0.5 * muDir1[ i ];
+	  pos2[ i ] -= 0.5 * muDir2[ i ];
+	}
+	SH::saveOBJ( pos0, muDir0, 0.05, SH::Colors(),
+		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Red );
+	SH::saveOBJ( pos1, muDir1, 0.05, SH::Colors(),
+		     fdir1, SH::Color( 0, 0, 0 ), SH::Color::Green );
+	SH::saveOBJ( pos2, muDir2, 0.05, SH::Colors(),
+		     fdir2, SH::Color( 0, 0, 0 ), SH::Color::Blue );
+      }
     }
   
-  const auto outputfile       = vm[ "output"   ].as<string>();
   if ( outputfile != "none" )
     {
       trace.beginBlock( "Save results as OBJ" );
