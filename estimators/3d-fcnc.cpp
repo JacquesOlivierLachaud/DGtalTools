@@ -118,13 +118,11 @@ int main( int argc, char** argv )
   EH::optionsImplicitShape   ( general_opt );
   EH::optionsDigitizedShape  ( general_opt );
   EH::optionsVolFile         ( general_opt );
-  // general_opt.add_options()
-  //   ( "thresholdMin,m", po::value<int>()->default_value( 0 ), "the minimum value for thresholding the vol file." )
-  //   ( "thresholdMax,M", po::value<int>()->default_value( 255 ), "the maximum value for thresholding the vol file." );
   EH::optionsNoisyImage      ( general_opt );
   EH::optionsNormalEstimators( general_opt );
   general_opt.add_options()
-    ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|Aniso|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), Aniso is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." )
+    ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), MuXY is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." )
+    ( "anisotropy", po::value<std::string>()->default_value( "NMult" ), "tells how is symmetrized the anisotropic measure mu_XY, in Mult|Add|NMult|NAdd: Mult forces symmetry by M*M^t, Add forces symmetry by 0.5*(M+M^t)+NxN, NMult and NAdd normalized by the area.")
     ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." );
   EH::optionsDisplayValues   ( general_opt );
   general_opt.add_options()
@@ -169,11 +167,12 @@ int main( int argc, char** argv )
                   << std::endl;
       return 0;
     }
-  auto quantity = vm[ "quantity" ].as<std::string>();
-  std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "Aniso", "HII", "GII" };
+  auto quantity   = vm[ "quantity"   ].as<std::string>();
+  auto anisotropy = vm[ "anisotropy" ].as<std::string>();
+  std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "MuXY", "HII", "GII" };
   if ( std::count( quantities.begin(), quantities.end(), quantity ) == 0 ) {
-    trace.error() << "Quantity should be in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|Aniso|HII|GII.";
-    trace.info() << std::endl;
+    trace.error() << "Quantity should be in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII.";
+    trace.info()  << " I read quantity=" << quantity << std::endl;
     return 0;
   }
 
@@ -218,7 +217,7 @@ int main( int argc, char** argv )
       // Fill useful parameters
       params( "thresholdMin", vm[ "thresholdMin" ].as<int>() );
       params( "thresholdMax", vm[ "thresholdMax" ].as<int>() );
-      params( "closed",       true );
+      params( "closed",       vm[ "closed" ].as<int>() );
       auto volfile = vm[ "input" ].as<string>();
       bimage       = SH::makeBinaryImage( volfile, params );
       K            = SH::getKSpace( bimage, params );
@@ -331,11 +330,14 @@ int main( int argc, char** argv )
       SH::RealVectors     muDir0( dft_surfels.size() );
       SH::RealVectors     muDir1( dft_surfels.size() );
       SH::RealVectors     muDir2( dft_surfels.size() );
+      SH::Scalars         kappa0( dft_surfels.size() );
+      SH::Scalars         kappa1( dft_surfels.size() );
+      SH::Scalars         kappa2( dft_surfels.size() );
       bool       mu0_needed = true;
       bool       mu1_needed = false;
       bool       mu2_needed = false;
       bool   muOmega_needed = false;
-      bool   muAniso_needed = false;
+      bool   muMuXY_needed = false;
       if ( quantity == "Mu0" )     mu0_needed = true;
       if ( quantity == "Mu1" )     mu1_needed = true;
       if ( quantity == "Mu2" )     mu2_needed = true;
@@ -343,7 +345,8 @@ int main( int argc, char** argv )
       if ( quantity == "H" )       mu0_needed = mu1_needed = true;
       if ( quantity == "G" )       mu0_needed = mu2_needed = true;
       if ( quantity == "Omega" )   mu0_needed = muOmega_needed = true;
-      if ( quantity == "Aniso" )   muAniso_needed = true;
+      if ( quantity == "MuXY" )    muMuXY_needed = true;
+      if ( anisotropy == "NMult" || anisotropy == "NAdd" ) mu0_needed = true;
       trace.beginBlock( "Compute mu_k everywhere" );
       trace.info() << "computeAllMu0" << std::endl;
       if ( mu0_needed ) C.computeAllMu0();
@@ -353,8 +356,8 @@ int main( int argc, char** argv )
       if ( mu2_needed ) C.computeAllMu2();
       trace.info() << "computeAllMuOmega" << std::endl;
       if ( muOmega_needed ) C.computeAllMuOmega();
-      trace.info() << "computeAllMuAnisotropic" << std::endl;
-      if ( muAniso_needed ) C.computeAllAnisotropicMu();
+      trace.info() << "computeAllMuXYAnisotropic" << std::endl;
+      if ( muMuXY_needed ) C.computeAllAnisotropicMu();
       time_mu_estimations = trace.endBlock();
       //#pragma omp parallel for schedule(dynamic)
       trace.info() << "compute measures" << std::endl;
@@ -366,11 +369,11 @@ int main( int argc, char** argv )
 	  trace.progressBar( i, j );
 	  Vertex v = C.getVertex( aSurfel );
 	  area    += C.mu0( v );
-	  if ( mu0_needed ) mu0[ i ] = C.mu0Ball( v, mr );
-	  if ( mu1_needed ) mu1[ i ] = C.mu1Ball( v, mr );
-	  if ( mu2_needed ) mu2[ i ] = C.mu2Ball( v, mr );
+	  if ( mu0_needed )     mu0[ i ]     = C.mu0Ball( v, mr );
+	  if ( mu1_needed )     mu1[ i ]     = C.mu1Ball( v, mr );
+	  if ( mu2_needed )     mu2[ i ]     = C.mu2Ball( v, mr );
 	  if ( muOmega_needed ) muOmega[ i ] = C.muOmegaBall( v, mr );
-	  if ( muAniso_needed ) {
+	  if ( muMuXY_needed ) { 
 	    auto M = C.anisotropicMuBall( v, mr );
 	    auto N = measured_normals[ i ];
 	    M += M.transpose();
@@ -428,7 +431,7 @@ int main( int argc, char** argv )
 			  muOmega.cbegin(), measured_values.begin(),
 			  [] ( double m0, double m2 ) { return m2 / sqrt( m0 ); } );
 	}
-      if ( quantity != "Aniso" )
+      if ( quantity != "MuXY" )
 	{
 	  for ( i = 0; i < j; ++i ) stat_measured_curv.addValue( measured_values[ i ] );
 	  stat_measured_curv.terminate();
@@ -439,7 +442,7 @@ int main( int argc, char** argv )
 	  trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
 	}
       time_curv_estimations = trace.endBlock();
-      if ( quantity == "Aniso" ) {
+      if ( quantity == "MuXY" ) {
 	std::string fdir0 = outputfile + "-dir0";
 	std::string fdir1 = outputfile + "-dir1";
 	std::string fdir2 = outputfile + "-dir2";

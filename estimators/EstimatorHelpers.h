@@ -290,6 +290,7 @@ namespace DGtal
         ("input,i", po::value<std::string>(), "vol file (.vol) , pgm3d (.p3d or .pgm3d, pgm (with 3 dims)) file or sdp (sequence of discrete points)" )
 	("thresholdMin,m",  po::value<int>()->default_value(0), "threshold min (excluded) to define binary shape" )
 	("thresholdMax,M",  po::value<int>()->default_value(255), "threshold max (included) to define binary shape" );
+	("closed",  po::value<int>()->default_value(1), "tells if the cellular space is closed (1:default) or open." );
     }
 
     /// Add options for implicit shape digitization.
@@ -319,8 +320,8 @@ namespace DGtal
 	("colormap", po::value<std::string>()->default_value( "Tics" ), "the chosen colormap for displaying values." )
 	("zero", po::value<double>()->default_value( 0.0 ), "the value of reference, displayed in black." )
 	("tics", po::value<double>()->default_value( 1.0 ), "the spacing between values with a basis at the reference value, displayed in grey." )
-	("minValue", po::value<double>(), "a specified min value associated with lowest color in colormap ." )
-	("maxValue", po::value<double>(), "a specified max value associated with highest color in colormap ." );
+	("minValue", po::value<double>()->default_value( -0.3 ), "a specified min value associated with lowest color in colormap ." )
+	("maxValue", po::value<double>()->default_value( 0.3 ), "a specified max value associated with highest color in colormap ." );
     }
     
     // ------------------- Shapes related functions -----------------------------
