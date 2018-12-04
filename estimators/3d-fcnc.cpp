@@ -243,6 +243,10 @@ int main( int argc, char** argv )
   trace.info() << "- surface has " << surface->size()<< " surfels." << std::endl;
   trace.endBlock();
 
+  const auto minValue         = vm[ "minValue" ].as<double>();
+  const auto maxValue         = vm[ "maxValue" ].as<double>();
+  const auto colormap_name    = vm[ "colormap" ].as<string>();
+  const auto zt               = vm[ "zero-tic" ].as<double>();
   auto outputfile    = vm[ "output"   ].as<string>();
   auto estimator     = vm[ "estimator" ].as<string>();
   const double h     = vm[ "gridstep"  ].as<double>();
@@ -337,7 +341,7 @@ int main( int argc, char** argv )
       bool       mu1_needed = false;
       bool       mu2_needed = false;
       bool   muOmega_needed = false;
-      bool   muMuXY_needed = false;
+      bool      muXY_needed = false;
       if ( quantity == "Mu0" )     mu0_needed = true;
       if ( quantity == "Mu1" )     mu1_needed = true;
       if ( quantity == "Mu2" )     mu2_needed = true;
@@ -345,7 +349,7 @@ int main( int argc, char** argv )
       if ( quantity == "H" )       mu0_needed = mu1_needed = true;
       if ( quantity == "G" )       mu0_needed = mu2_needed = true;
       if ( quantity == "Omega" )   mu0_needed = muOmega_needed = true;
-      if ( quantity == "MuXY" )    muMuXY_needed = true;
+      if ( quantity == "MuXY" )    muXY_needed = true;
       if ( anisotropy == "NMult" || anisotropy == "NAdd" ) mu0_needed = true;
       trace.beginBlock( "Compute mu_k everywhere" );
       trace.info() << "computeAllMu0" << std::endl;
@@ -357,12 +361,14 @@ int main( int argc, char** argv )
       trace.info() << "computeAllMuOmega" << std::endl;
       if ( muOmega_needed ) C.computeAllMuOmega();
       trace.info() << "computeAllMuXYAnisotropic" << std::endl;
-      if ( muMuXY_needed ) C.computeAllAnisotropicMu();
+      if ( muXY_needed ) C.computeAllAnisotropicMu();
       time_mu_estimations = trace.endBlock();
       //#pragma omp parallel for schedule(dynamic)
       trace.info() << "compute measures" << std::endl;
       Vertex              i = 0;
       Vertex              j = dft_surfels.size();
+      const bool normalized = ( anisotropy == "NMult" ) || ( anisotropy == "NAdd" );
+      const bool M_times_Mt = ( anisotropy == "Mult" )  || ( anisotropy == "NMult" );
       for ( auto aSurfel : dft_surfels )
 	{
 	  // std::cout << i << " / " << j << std::endl;
@@ -373,7 +379,7 @@ int main( int argc, char** argv )
 	  if ( mu1_needed )     mu1[ i ]     = C.mu1Ball( v, mr );
 	  if ( mu2_needed )     mu2[ i ]     = C.mu2Ball( v, mr );
 	  if ( muOmega_needed ) muOmega[ i ] = C.muOmegaBall( v, mr );
-	  if ( muMuXY_needed ) { 
+	  if ( muXY_needed && ! M_times_Mt ) {
 	    auto M = C.anisotropicMuBall( v, mr );
 	    auto N = measured_normals[ i ];
 	    M += M.transpose();
@@ -383,20 +389,29 @@ int main( int argc, char** argv )
 		M( j, k ) += 100.0 * N[ j ] * N[ k ];
 	    auto V = M;
 	    RealVector L;
-	    // trace.info() << M( 0, 0 ) << " "<< M( 0, 1 ) << " "<< M( 0, 2 ) << std::endl;
-	    // trace.info() << M( 1, 0 ) << " "<< M( 1, 1 ) << " "<< M( 1, 2 ) << std::endl;
-	    // trace.info() << M( 2, 0 ) << " "<< M( 2, 1 ) << " "<< M( 2, 2 ) << std::endl;
 	    EigenDecomposition< 3, double>::getEigenDecomposition( M, V, L );
-	    //trace.info() << L[ 0 ] << " " << L[ 1 ] << " " << L[ 2 ] << std::endl;
 	    auto lmax = std::max( fabs( L[ 0 ] ), fabs( L[ 1 ] ) );
-	    //trace.info() << "lmax=" << lmax << std::endl;
 	    L[ 0 ] = fabs( L[ 0 ] );
 	    L[ 1 ] = fabs( L[ 1 ] );
 	    auto j = L[ 0 ] > L[ 1 ] ? 0 : 1;
-	    if ( L [ j ] > 1.0 ) { L[ 1-j ] /= L[ j ]; L[ j ] = 1.0;  } 
-	    muDir0[ i ] = L[ j ] * V.column( j );
-	    muDir1[ i ] = L[ 1-j ] * V.column( 1-j );
+	    muDir0[ i ] = V.column( j );
+	    muDir1[ i ] = V.column( 1-j );
 	    muDir2[ i ] = V.column( 2 );
+            kappa0[ i ] = normalized ? L[ j ] / mu0[ i ]   : L[ j ];
+            kappa1[ i ] = normalized ? L[ 1-j ] / mu0[ i ] : L[ 1-j ];
+            kappa2[ i ] = normalized ? L[ 2 ] / mu0[ i ]   : L[ 2 ];
+	  } else if ( muXY_needed && M_times_Mt ) {
+	    auto M = C.anisotropicMuBall( v, mr );
+	    auto MMt = M * M.transpose();
+	    auto V = M;
+	    RealVector L;
+	    EigenDecomposition< 3, double>::getEigenDecomposition( MMt, V, L );
+	    muDir0[ i ] = V.column( 0 );
+	    muDir1[ i ] = V.column( 1 );
+	    muDir2[ i ] = V.column( 2 );
+            kappa0[ i ] = normalized ? sqrt( fabs( L[ 0 ] ) ) / mu0[ i ] : sqrt( fabs( L[ 0 ] ) );
+            kappa1[ i ] = normalized ? sqrt( fabs( L[ 1 ] ) ) / mu0[ i ] : sqrt( fabs( L[ 1 ] ) );
+            kappa2[ i ] = normalized ? sqrt( fabs( L[ 2 ] ) ) / mu0[ i ] : sqrt( fabs( L[ 2 ] ) );
 	  }
 	  ++i;
 	}
@@ -443,26 +458,46 @@ int main( int argc, char** argv )
 	}
       time_curv_estimations = trace.endBlock();
       if ( quantity == "MuXY" ) {
-	std::string fdir0 = outputfile + "-dir0";
-	std::string fdir1 = outputfile + "-dir1";
-	std::string fdir2 = outputfile + "-dir2";
+        trace.beginBlock( "Output principal curvatures and directions files." );
 	SH::RealPoints positions( dft_surfels.size() );
 	std::transform( dft_surfels.cbegin(), dft_surfels.cend(), positions.begin(),
 			[&] (const SH::SCell& c) { return embedder( c ); } );
-	auto pos0 = positions;
-	auto pos1 = positions;
-	auto pos2 = positions;
+	auto pos0 = positions,   pos1 = positions,   pos2 = positions;
+        auto max0 = kappa0[ 0 ], max1 = kappa1[ 0 ], max2 = kappa2[ 0 ];
+        auto min0 = kappa0[ 0 ], min1 = kappa1[ 0 ], min2 = kappa2[ 0 ];
 	for ( SH::Idx i = 0; i < pos0.size(); ++i ) {
 	  pos0[ i ] -= 0.5 * muDir0[ i ];
 	  pos1[ i ] -= 0.5 * muDir1[ i ];
 	  pos2[ i ] -= 0.5 * muDir2[ i ];
+          max0 = std::max( max0, kappa0[ i ] );
+          max1 = std::max( max1, kappa1[ i ] );
+          max2 = std::max( max2, kappa2[ i ] );
+          min0 = std::min( min0, kappa0[ i ] );
+          min1 = std::min( min1, kappa1[ i ] );
+          min2 = std::min( min2, kappa2[ i ] );
 	}
+        trace.info() << min0 << " <= kappa0 <= " << max0 << std::endl;
+        trace.info() << min1 << " <= kappa1 <= " << max1 << std::endl;
+        trace.info() << min2 << " <= kappa2 <= " << max2 << std::endl;
+	SH::saveOBJ( surface, SH::RealVectors(), SH::Colors(),
+		     outputfile+"-primal.obj" );
 	SH::saveOBJ( pos0, muDir0, 0.05, SH::Colors(),
-		     fdir0, SH::Color( 0, 0, 0 ), SH::Color::Red );
+		     outputfile+"-dir0.obj", SH::Color::Red );
 	SH::saveOBJ( pos1, muDir1, 0.05, SH::Colors(),
-		     fdir1, SH::Color( 0, 0, 0 ), SH::Color::Green );
+		     outputfile+"-dir1.obj", SH::Color::Red );
 	SH::saveOBJ( pos2, muDir2, 0.05, SH::Colors(),
-		     fdir2, SH::Color( 0, 0, 0 ), SH::Color::Blue );
+		     outputfile+"-dir2.obj", SH::Color::Red );
+        auto colors = SH::Colors( dft_surfels.size() );
+        const auto colormap0 = SH::getColorMap( min0, max0, params( "colormap", colormap_name ) );
+        for ( SH::Idx i = 0; i < colors.size(); i++ ) colors[ i ] = colormap0( kappa0[ i ] );
+        SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa0.obj" );
+        const auto colormap1 = SH::getColorMap( min1, max1, params( "colormap", colormap_name ) );
+        for ( SH::Idx i = 0; i < colors.size(); i++ ) colors[ i ] = colormap1( kappa1[ i ] );
+        SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa1.obj" );
+        const auto colormap2 = SH::getColorMap( min2, max2, params( "colormap", colormap_name ) );
+        for ( SH::Idx i = 0; i < colors.size(); i++ ) colors[ i ] = colormap2( kappa2[ i ] );
+        SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa2.obj" );
+        trace.endBlock();
       }
     }
   
@@ -471,10 +506,6 @@ int main( int argc, char** argv )
       trace.beginBlock( "Save results as OBJ" );
       const bool has_ground_truth = expected_values.size() != 0;
       const bool has_estimations  = measured_values.size() != 0;
-      const auto minValue         = vm[ "minValue" ].as<double>();
-      const auto maxValue         = vm[ "maxValue" ].as<double>();
-      const auto colormap_name    = vm[ "colormap" ].as<string>();
-      const auto zt               = vm[ "zero-tic" ].as<double>();
       const auto colormap         = SH::getZeroTickedColorMap( minValue, maxValue,
                                                                params( "colormap", colormap_name )
                                                                ( "zero-tic", zt ) );
