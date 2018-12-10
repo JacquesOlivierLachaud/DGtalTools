@@ -289,7 +289,7 @@ namespace DGtal
       desc.add_options()
         ("input,i", po::value<std::string>(), "vol file (.vol) , pgm3d (.p3d or .pgm3d, pgm (with 3 dims)) file or sdp (sequence of discrete points)" )
 	("thresholdMin,m",  po::value<int>()->default_value(0), "threshold min (excluded) to define binary shape" )
-	("thresholdMax,M",  po::value<int>()->default_value(255), "threshold max (included) to define binary shape" );
+	("thresholdMax,M",  po::value<int>()->default_value(255), "threshold max (included) to define binary shape" )
 	("closed",  po::value<int>()->default_value(1), "tells if the cellular space is closed (1:default) or open." );
     }
 

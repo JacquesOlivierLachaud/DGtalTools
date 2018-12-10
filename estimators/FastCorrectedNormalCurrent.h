@@ -677,9 +677,19 @@ namespace DGtal
       Scalar X_x_e_d_e1_x_ui = X_x_e.dot( e1_x_ui );
       Scalar         sin_psi = sin( lai.psi );
       Scalar        sin_2psi = sin( 2.0*lai.psi );
-      Scalar m = ( lai.psi + sin_2psi ) * X_x_e_d_e1_x_ui*Y_d_ui
-	- ( sin_2psi - lai.psi ) * X_x_e_d_ui*Y_d_e1_x_ui
-	+ sin_psi * sin_psi * ( X_x_e_d_ui*Y_d_ui - X_x_e_d_e1_x_ui*Y_d_e1_x_ui );
+      // v1
+      // Scalar m = ( lai.psi + sin_2psi ) * X_x_e_d_e1_x_ui*Y_d_ui
+      // 	- ( sin_2psi - lai.psi ) * X_x_e_d_ui*Y_d_e1_x_ui
+      // 	+ sin_psi * sin_psi * ( X_x_e_d_ui*Y_d_ui - X_x_e_d_e1_x_ui*Y_d_e1_x_ui );
+      // return 0.5 * m;
+      // v2
+      // Scalar m = (1.0 + sin_2psi ) * X_x_e_d_e1_x_ui*Y_d_ui
+      // 	- ( 1.0 - sin_2psi ) * X_x_e_d_ui*Y_d_e1_x_ui
+      // 	+ sin_psi * sin_psi * ( X_x_e_d_ui*Y_d_ui - X_x_e_d_e1_x_ui*Y_d_e1_x_ui );
+      // return 0.5 * lai.psi * m;
+      Scalar m = (-lai.psi - 0.5*sin_2psi)*X_x_e_d_ui*Y_d_e1_x_ui
+	+(sin_psi*sin_psi) * ( X_x_e_d_ui*Y_d_ui - X_x_e_d_e1_x_ui*Y_d_e1_x_ui )
+	+(lai.psi - 0.5*sin_2psi) *  X_x_e_d_e1_x_ui*Y_d_ui;
       return 0.5 * m;
     }
 

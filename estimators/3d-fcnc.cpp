@@ -231,7 +231,8 @@ int main( int argc, char** argv )
 		 [&nb] ( bool v ) { nb += v ? 1 : 0; } );
   trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
   
-  auto embedder    = SH::getSCellEmbedder( K );
+  auto sembedder   = SH::getSCellEmbedder( K );
+  auto embedder    = SH::getCellEmbedder( K );
   auto surface     = SH::makeDigitalSurface( bimage, K, params );
   auto idx_surface = SH::makeIdxDigitalSurface( surface );
   if ( surface == 0 ) {
@@ -247,6 +248,8 @@ int main( int argc, char** argv )
   const auto maxValue         = vm[ "maxValue" ].as<double>();
   const auto colormap_name    = vm[ "colormap" ].as<string>();
   const auto zt               = vm[ "zero-tic" ].as<double>();
+  const double vthickness      = 0.1;
+  const double vlength         = 1.5;
   auto outputfile    = vm[ "output"   ].as<string>();
   auto estimator     = vm[ "estimator" ].as<string>();
   const double h     = vm[ "gridstep"  ].as<double>();
@@ -266,8 +269,11 @@ int main( int argc, char** argv )
   double time_normal_estimations = 0.0;
   
   trace.beginBlock( "Compute surfels" );
+  params( "surfaceTraversal", "Default" );
+  const auto     surfels = SH::getSurfelRange( surface, params );
   params( "surfaceTraversal", "DepthFirst" );
-  auto dft_surfels  = SH::getSurfelRange( surface, params );
+  const auto dft_surfels = SH::getSurfelRange( surface, params );
+  const auto       match = SH::getRangeMatch ( surfels, dft_surfels );
   trace.endBlock();
 
   // Compute true and/or estimated normal vectors
@@ -384,22 +390,19 @@ int main( int argc, char** argv )
 	    auto N = measured_normals[ i ];
 	    M += M.transpose();
 	    M *= 0.5;
+	    const double   coef_N = normalized ? 100.0 * mu0[ i ] : 100.0;
 	    for ( int j = 0; j < 3; j++ )
-	      for ( int k = 0; k < 3; k++ )
-		M( j, k ) += 100.0 * N[ j ] * N[ k ];
+	       for ( int k = 0; k < 3; k++ )
+		 M( j, k ) += coef_N * N[ j ] * N[ k ];
 	    auto V = M;
 	    RealVector L;
 	    EigenDecomposition< 3, double>::getEigenDecomposition( M, V, L );
-	    auto lmax = std::max( fabs( L[ 0 ] ), fabs( L[ 1 ] ) );
-	    L[ 0 ] = fabs( L[ 0 ] );
-	    L[ 1 ] = fabs( L[ 1 ] );
-	    auto j = L[ 0 ] > L[ 1 ] ? 0 : 1;
-	    muDir0[ i ] = V.column( j );
-	    muDir1[ i ] = V.column( 1-j );
+	    muDir0[ i ] = V.column( 0 );
+	    muDir1[ i ] = V.column( 1 );
 	    muDir2[ i ] = V.column( 2 );
-            kappa0[ i ] = normalized ? L[ j ] / mu0[ i ]   : L[ j ];
-            kappa1[ i ] = normalized ? L[ 1-j ] / mu0[ i ] : L[ 1-j ];
-            kappa2[ i ] = normalized ? L[ 2 ] / mu0[ i ]   : L[ 2 ];
+            kappa0[ i ] = normalized ? -L[ 0 ] / mu0[ i ] : -L[ 0 ];
+            kappa1[ i ] = normalized ? -L[ 1 ] / mu0[ i ] : -L[ 1 ];
+            kappa2[ i ] = normalized ? -L[ 2 ] / mu0[ i ] : -L[ 2 ];
 	  } else if ( muXY_needed && M_times_Mt ) {
 	    auto M = C.anisotropicMuBall( v, mr );
 	    auto MMt = M * M.transpose();
@@ -409,9 +412,9 @@ int main( int argc, char** argv )
 	    muDir0[ i ] = V.column( 0 );
 	    muDir1[ i ] = V.column( 1 );
 	    muDir2[ i ] = V.column( 2 );
-            kappa0[ i ] = normalized ? sqrt( fabs( L[ 0 ] ) ) / mu0[ i ] : sqrt( fabs( L[ 0 ] ) );
-            kappa1[ i ] = normalized ? sqrt( fabs( L[ 1 ] ) ) / mu0[ i ] : sqrt( fabs( L[ 1 ] ) );
-            kappa2[ i ] = normalized ? sqrt( fabs( L[ 2 ] ) ) / mu0[ i ] : sqrt( fabs( L[ 2 ] ) );
+            kappa0[ i ] = sqrt( fabs( L[ 0 ] ) ) / ( normalized ? mu0[ i ] : 1.0 );
+            kappa1[ i ] = sqrt( fabs( L[ 1 ] ) ) / ( normalized ? mu0[ i ] : 1.0 );
+            kappa2[ i ] = sqrt( fabs( L[ 2 ] ) ) / ( normalized ? mu0[ i ] : 1.0 );
 	  }
 	  ++i;
 	}
@@ -461,11 +464,14 @@ int main( int argc, char** argv )
         trace.beginBlock( "Output principal curvatures and directions files." );
 	SH::RealPoints positions( dft_surfels.size() );
 	std::transform( dft_surfels.cbegin(), dft_surfels.cend(), positions.begin(),
-			[&] (const SH::SCell& c) { return embedder( c ); } );
+			[&] (const SH::SCell& c) { return sembedder( c ); } );
 	auto pos0 = positions,   pos1 = positions,   pos2 = positions;
         auto max0 = kappa0[ 0 ], max1 = kappa1[ 0 ], max2 = kappa2[ 0 ];
         auto min0 = kappa0[ 0 ], min1 = kappa1[ 0 ], min2 = kappa2[ 0 ];
 	for ( SH::Idx i = 0; i < pos0.size(); ++i ) {
+	  muDir0[ i ] *= vlength;
+	  muDir1[ i ] *= vlength;
+	  muDir2[ i ] *= vlength;
 	  pos0[ i ] -= 0.5 * muDir0[ i ];
 	  pos1[ i ] -= 0.5 * muDir1[ i ];
 	  pos2[ i ] -= 0.5 * muDir2[ i ];
@@ -481,23 +487,75 @@ int main( int argc, char** argv )
         trace.info() << min2 << " <= kappa2 <= " << max2 << std::endl;
 	SH::saveOBJ( surface, SH::RealVectors(), SH::Colors(),
 		     outputfile+"-primal.obj" );
-	SH::saveOBJ( pos0, muDir0, 0.05, SH::Colors(),
-		     outputfile+"-dir0.obj", SH::Color::Red );
-	SH::saveOBJ( pos1, muDir1, 0.05, SH::Colors(),
-		     outputfile+"-dir1.obj", SH::Color::Red );
-	SH::saveOBJ( pos2, muDir2, 0.05, SH::Colors(),
-		     outputfile+"-dir2.obj", SH::Color::Red );
         auto colors = SH::Colors( dft_surfels.size() );
-        const auto colormap0 = SH::getColorMap( min0, max0, params( "colormap", colormap_name ) );
-        for ( SH::Idx i = 0; i < colors.size(); i++ ) colors[ i ] = colormap0( kappa0[ i ] );
+	// TODO 
+	const auto cmap_kappa
+	  = SH::getZeroTickedColorMap( minValue, maxValue,
+				       params( "colormap", colormap_name )
+				       ( "zero-tic", zt ) );
+        for ( SH::Idx i = 0; i < colors.size(); i++ )
+	  colors[ i ] = cmap_kappa( kappa0[ i ] );
+	SH::saveOBJ( pos0, muDir0, vthickness, colors, outputfile+"-dir0.obj" );
+        for ( SH::Idx i = 0; i < colors.size(); i++ )
+	  colors[ i ] = cmap_kappa( kappa1[ i ] );
+	SH::saveOBJ( pos1, muDir1, vthickness, colors, outputfile+"-dir1.obj" );
+	// normal direction, color has no meaning
+	SH::saveOBJ( pos2, muDir2, vthickness, SH::Colors(),
+		     outputfile+"-dir2.obj", SH::Color::Black, SH::Color::Blue );
+	const auto colormap0 = SH::getColorMap( min0, max0,
+						params( "colormap", colormap_name ) );
+        for ( SH::Idx i = 0; i < colors.size(); i++ )
+	  colors[ i ] = colormap0( kappa0[ match[ i ] ] );
         SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa0.obj" );
-        const auto colormap1 = SH::getColorMap( min1, max1, params( "colormap", colormap_name ) );
-        for ( SH::Idx i = 0; i < colors.size(); i++ ) colors[ i ] = colormap1( kappa1[ i ] );
+        const auto colormap1 = SH::getColorMap( min1, max1,
+						params( "colormap", colormap_name ) );
+        for ( SH::Idx i = 0; i < colors.size(); i++ )
+	  colors[ i ] = colormap1( kappa1[ match[ i ] ] );
         SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa1.obj" );
-        const auto colormap2 = SH::getColorMap( min2, max2, params( "colormap", colormap_name ) );
-        for ( SH::Idx i = 0; i < colors.size(); i++ ) colors[ i ] = colormap2( kappa2[ i ] );
+        const auto colormap2 = SH::getColorMap( min2, max2,
+						params( "colormap", colormap_name ) );
+        for ( SH::Idx i = 0; i < colors.size(); i++ )
+	  colors[ i ] = colormap2( kappa2[ match[ i ] ] );
         SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa2.obj" );
-        trace.endBlock();
+
+	SH::saveOBJ( surface, SH::RealVectors(), SH::Colors(),
+		     outputfile+"-primal.obj" );
+	if ( vm.count( "polynomial" ) ) {
+	  SH::Cell2Index c2i;
+	  auto pointels = SH::getPointelRange( c2i, surface );
+	  SH::RealPoints pos( pointels.size() );
+	  std::transform( pointels.cbegin(), pointels.cend(), pos.begin(),
+			  [&] (const SH::Cell& c) { return h * embedder( c ); } ); 
+	  auto ppos     = SHG::getPositions( shape, pos, params );
+	  std::transform( ppos.cbegin(), ppos.cend(), pos.begin(),
+			  [&] (const SH::RealPoint& p) { return p / h; } );
+	  SH::saveOBJ( surface, [&] (const SH::Cell& c){ return pos[ c2i[ c ] ];},
+		       SH::RealVectors(), SH::Colors(),
+		       outputfile+"-qproj.obj" );
+	  SH::RealPoints pos_surf( dft_surfels.size() );
+	  std::transform( dft_surfels.cbegin(), dft_surfels.cend(), pos_surf.begin(),
+			  [&] (const SH::SCell& c) { return h * sembedder( c ); } ); 
+	  auto ppos_surf = SHG::getPositions( shape, pos_surf, params );
+	  std::transform( ppos_surf.cbegin(), ppos_surf.cend(), pos_surf.begin(),
+			  [&] (const SH::RealPoint& p) { return p / h; } );
+	  // auto real_pos = SH::getMatchedRange( pos_surf, match );
+	  pos0 = pos1 = pos2 = pos_surf; //real_pos;
+	  for ( SH::Idx i = 0; i < pos0.size(); ++i ) {
+	    pos0[ i ] -= 0.5 * muDir0[ i ];
+	    pos1[ i ] -= 0.5 * muDir1[ i ];
+	    pos2[ i ] -= 0.5 * muDir2[ i ];
+	  }
+        for ( SH::Idx i = 0; i < colors.size(); i++ )
+	  colors[ i ] = cmap_kappa( kappa0[ i ] );
+	SH::saveOBJ( pos0, muDir0, vthickness, colors, outputfile+"-qproj-dir0.obj" );
+        for ( SH::Idx i = 0; i < colors.size(); i++ )
+	  colors[ i ] = cmap_kappa( kappa1[ i ] );
+	SH::saveOBJ( pos1, muDir1, vthickness, colors, outputfile+"-qproj-dir1.obj" );
+	SH::saveOBJ( pos2, muDir2, vthickness, SH::Colors(),
+		     outputfile+"-qproj-dir2.obj", SH::Color::Black,
+		     SH::Color::Blue );
+	}
+	trace.endBlock();
       }
     }
   
@@ -513,11 +571,6 @@ int main( int argc, char** argv )
       trace.info() << "#mvalues=" << measured_values.size() << std::endl;
       trace.info() << "#evalues=" << expected_values.size() << std::endl;
 
-      trace.beginBlock( "Compute surfels" );
-      params( "surfaceTraversal", "Default" );
-      const auto surfels = SH::getSurfelRange( surface, params );
-      const auto match   = SH::getRangeMatch ( surfels, dft_surfels );
-      trace.endBlock();
       
       auto colors = SH::Colors( surfels.size() );
       if ( has_ground_truth )
@@ -545,6 +598,8 @@ int main( int argc, char** argv )
 	  SH::saveOBJ( surface, SH::getMatchedRange( measured_normals, match ), colors,
 		       outputfile+"-error.obj" );
 	}
+
+
       trace.endBlock();
     }
   
