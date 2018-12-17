@@ -208,7 +208,8 @@ int main( int argc, char* argv[] )
   trace.info() << duy_dx_dux_dy << endl;
 
   
-  Calculus::DualForm1 u = calculus.flat( vfu ); // d0_ * solution;
+  Calculus::DualForm1 u = calculus.flat( vfu );
+  // Calculus::DualForm1 u = d0_ * solution;
   Calculus::DualForm1 ux = X * u;
   Calculus::DualForm1 uy = Y * u;
   {
