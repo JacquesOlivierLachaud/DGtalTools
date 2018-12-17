@@ -79,6 +79,20 @@ getErrorColorMap( Scalar max )
   return gradcmap;
 }
 
+template <typename Colors>
+Colors getSimplifiedColorMap( const Colors& colors, unsigned char lost_mask = 0x03 )
+{
+  auto    new_colors = colors;
+  unsigned char mask = 0xff ^ lost_mask;
+  for ( Color& c : new_colors )
+    {
+      c.red  ( c.red()   & mask );
+      c.green( c.green() & mask );
+      c.blue ( c.blue()  & mask );
+      c.alpha( c.alpha() & mask );
+    }
+  return new_colors;
+}
 
 /**
  * Missing parameter error message.
@@ -272,6 +286,7 @@ int main( int argc, char** argv )
   params( "surfaceTraversal", "Default" );
   const auto     surfels = SH::getSurfelRange( surface, params );
   params( "surfaceTraversal", "DepthFirst" );
+  //params( "surfaceTraversal", "Default" ); //< Force default (bug in II ?)
   const auto dft_surfels = SH::getSurfelRange( surface, params );
   const auto       match = SH::getRangeMatch ( surfels, dft_surfels );
   trace.endBlock();
@@ -290,8 +305,11 @@ int main( int argc, char** argv )
     measured_normals = SHG::getCTrivialNormalVectors( surface, dft_surfels, params );
   else if ( estimator == "VCM" )
     measured_normals = SHG::getVCMNormalVectors( surface, dft_surfels, params );
-  else if ( estimator == "II" )
+  else if ( estimator == "II" ) {
     measured_normals = SHG::getIINormalVectors( bimage, dft_surfels, params );
+    auto oriented_normals = SHG::getCTrivialNormalVectors( surface, dft_surfels, params );
+    SHG::orientVectors( measured_normals, oriented_normals );
+  }
   else // default is "Trivial"
     measured_normals = SHG::getTrivialNormalVectors( K, dft_surfels );
   time_normal_estimations = trace.endBlock();
@@ -495,10 +513,10 @@ int main( int argc, char** argv )
 				       ( "zero-tic", zt ) );
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = cmap_kappa( kappa0[ i ] );
-	SH::saveOBJ( pos0, muDir0, vthickness, colors, outputfile+"-dir0.obj" );
+	SH::saveOBJ( pos0, muDir0, vthickness, getSimplifiedColorMap( colors ), outputfile+"-dir0.obj" );
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = cmap_kappa( kappa1[ i ] );
-	SH::saveOBJ( pos1, muDir1, vthickness, colors, outputfile+"-dir1.obj" );
+	SH::saveOBJ( pos1, muDir1, vthickness, getSimplifiedColorMap( colors ), outputfile+"-dir1.obj" );
 	// normal direction, color has no meaning
 	SH::saveOBJ( pos2, muDir2, vthickness, SH::Colors(),
 		     outputfile+"-dir2.obj", SH::Color::Black, SH::Color::Blue );
@@ -506,17 +524,17 @@ int main( int argc, char** argv )
 						params( "colormap", colormap_name ) );
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = colormap0( kappa0[ match[ i ] ] );
-        SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa0.obj" );
+        SH::saveOBJ( surface, SH::RealVectors(), getSimplifiedColorMap( colors ), outputfile+"-kappa0.obj" );
         const auto colormap1 = SH::getColorMap( min1, max1,
 						params( "colormap", colormap_name ) );
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = colormap1( kappa1[ match[ i ] ] );
-        SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa1.obj" );
+        SH::saveOBJ( surface, SH::RealVectors(), getSimplifiedColorMap( colors ), outputfile+"-kappa1.obj" );
         const auto colormap2 = SH::getColorMap( min2, max2,
 						params( "colormap", colormap_name ) );
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = colormap2( kappa2[ match[ i ] ] );
-        SH::saveOBJ( surface, SH::RealVectors(), colors, outputfile+"-kappa2.obj" );
+        SH::saveOBJ( surface, SH::RealVectors(), getSimplifiedColorMap( colors ), outputfile+"-kappa2.obj" );
 
 	SH::saveOBJ( surface, SH::RealVectors(), SH::Colors(),
 		     outputfile+"-primal.obj" );
