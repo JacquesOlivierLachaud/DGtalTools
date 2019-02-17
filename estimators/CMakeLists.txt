@@ -12,6 +12,7 @@ SET(DGTAL_TOOLS_SRC
   3dCorrectedNormalCurrent
   3dFastCorrectedNormalCurrent
   3d-fcnc
+  measure-normals
 )
 
 if (WITH_EIGEN)
