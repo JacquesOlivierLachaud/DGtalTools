@@ -67,6 +67,7 @@
 #include "DGtal/graph/DepthFirstVisitor.h"
 #include "DGtal/graph/GraphVisitorRange.h"
 #include "DGtal/geometry/volumes/KanungoNoise.h"
+#include "DGtal/geometry/volumes/distance/LpMetric.h"
 #include "DGtal/geometry/volumes/distance/ExactPredicateLpSeparableMetric.h"
 #include "DGtal/geometry/surfaces/estimation/TrueDigitalSurfaceLocalEstimator.h"
 #include "DGtal/geometry/surfaces/estimation/VoronoiCovarianceMeasureOnDigitalSurface.h"
@@ -770,7 +771,7 @@ namespace DGtal
 				    const std::vector< Surfel >& surfels )
     {
       Scalar t = vm[ "trivial-ring" ].as<double>();
-      typedef ExactPredicateLpSeparableMetric<Space,2>              Metric;
+      typedef LpMetric<Space>              Metric;
       typedef functors::HatFunction<Scalar>                         Functor;
       typedef functors::ElementaryConvolutionNormalVectorEstimator
 	< Surfel, CanonicSCellEmbedder<KSpace> >                    SurfelFunctor;
@@ -779,7 +780,7 @@ namespace DGtal
       trace.info() << " CTrivial normal t=" << t << " (discrete)" << std::endl;
       const Functor fct( 1.0, t );
       const KSpace &  K = surface->container().space();
-      Metric    aMetric;
+      Metric    aMetric( 2.0 );
       CanonicSCellEmbedder<KSpace> canonic_embedder( K );
       std::vector< RealVector >    n_estimations;
       SurfelFunctor                surfelFct( canonic_embedder, 1.0 );

@@ -164,8 +164,6 @@ int main( int argc, char** argv )
   std::for_each( bimage->cbegin(), bimage->cend(),
 		 [&nb] ( bool v ) { nb += v ? 1 : 0; } );
   trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
-  auto sembedder   = SH::getSCellEmbedder( K );
-  auto embedder    = SH::getCellEmbedder( K );
   auto surface     = SH::makeDigitalSurface( bimage, K, params );
   if ( surface == 0 ) {
     trace.error() << "- surface is empty (either empty or full volume). ";
@@ -186,7 +184,8 @@ int main( int argc, char** argv )
   // Compute true and estimated normal vectors
   SH::RealVectors expected_normals;
   SH::RealVectors measured_normals;
-  auto            estimator = vm[ "estimator" ].as<string>();
+  auto estimator = vm[ "estimator" ].as<string>();
+  auto h         = vm[ "gridstep"  ].as<double>();
   trace.beginBlock( "Compute true and estimated normals" );
   expected_normals = SHG::getNormalVectors( shape, K, dft_surfels, params );
   if ( estimator == "True" )
@@ -209,7 +208,7 @@ int main( int argc, char** argv )
 							 measured_normals );
   auto zeroes           = SHG::Scalars( normal_angle_dev.size(), 0.0 );
   auto stat_angle_error = SHG::getStatistic( normal_angle_dev );
-  trace.info() << "n-u "
+  trace.info() << "angle(n-u) "
 	       << " l1=" << SHG::getScalarsNormL1 ( normal_angle_dev, zeroes )
 	       << " l2=" << SHG::getScalarsNormL2 ( normal_angle_dev, zeroes )
 	       << " loo=" << SHG::getScalarsNormLoo ( normal_angle_dev, zeroes );
@@ -228,7 +227,43 @@ int main( int argc, char** argv )
   delta_u.terminate();
   trace.info() << "delta_u "
 	       << " mean=" << delta_u.mean()
-	       << " loo=" << delta_u.max();
+	       << " loo=" << delta_u.max()
+               << std::endl;
   trace.endBlock();
+
+  trace.beginBlock( "Output statistics" );
+  auto error_fname = vm[ "error" ].as<std::string>();
+  std::ofstream ferr;
+  ferr.open ( error_fname.c_str(),
+	      std::ofstream::out | std::ofstream::app );
+  if ( ! ferr.good() )
+    trace.warning() << "Unable to open file " << error_fname << std::endl;
+  ferr << "######################################################################"
+       << std::endl;
+  ferr << "# Measures for a normal estimator u its angle error angle(n-u) wrt" << std::endl;
+  ferr << "# ground truth n, as well as its local variation delta_u."          << std::endl;
+  ferr << "# ";
+  for ( int i = 0; i < argc; ++i ) ferr << " " << argv[ i ];
+  ferr << std::endl;
+  ferr << "#---------------------------------------------------------------------"
+       << std::endl;
+  ferr << "# P="  << vm[ "polynomial" ].as<std::string>()
+       << std::endl;
+  ferr << "# time_normal_estimations = " << time_normal_estimations << " ms" << std::endl;
+  ferr << "# h(1) size(2) angle(n-u){ l1(3) l2(4) loo(5) }"
+       << " delta_u{ mean(6) loo(7) } time_normal_est(8)" << std::endl;
+  ferr << h << " " << measured_normals.size()
+       << " " << SHG::getScalarsNormL1 ( normal_angle_dev, zeroes )
+       << " " << SHG::getScalarsNormL2 ( normal_angle_dev, zeroes )
+       << " " << SHG::getScalarsNormLoo( normal_angle_dev, zeroes )
+       << " " << delta_u.mean()
+       << " " << delta_u.max()
+       << " " << time_normal_estimations
+       << std::endl;
+  ferr << "#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+       << std::endl;
+  ferr.close();
+  trace.endBlock();
+  
   return 0;
 }
