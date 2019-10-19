@@ -32,6 +32,7 @@
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
 
+#define GL_SILENCE_DEPRECATION
 #include "DGtal/base/Common.h"
 #include "DGtal/helpers/StdDefs.h"
 

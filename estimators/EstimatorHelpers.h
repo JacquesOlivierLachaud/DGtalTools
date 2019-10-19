@@ -520,10 +520,10 @@ namespace DGtal
     ( const po::variables_map& vm,
       KSpace&                  K )
     {
-      string inputFilename = vm["input"].as<std::string>();
+      std::string input    = vm["input"].as<std::string>();
       int thresholdMin     = vm["thresholdMin"].as<int>();
       int thresholdMax     = vm["thresholdMax"].as<int>();
-      GrayScaleImage image = GenericReader<GrayScaleImage>::import( inputFilename );
+      GrayScaleImage image = GenericReader<GrayScaleImage>::import( input );
       Domain        domain = image.domain();
       bool        space_ok = K.init( domain.lowerBound(), domain.upperBound(), true );
       if ( ! space_ok )
