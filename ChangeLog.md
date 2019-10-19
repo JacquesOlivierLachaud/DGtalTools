@@ -1,8 +1,25 @@
 # DGtalTools 1.0
 
+- *generators*
+  - 3dParametricCurveDigitizer - a tool for digitization of 3D parametric curves (Kacper Pluta,
+    [#341](https://github.com/DGtal-team/DGtalTools/pull/341))
+
 - *global*
     - Continuous integration AppVeyor fix.
       (Bertrand Kerautret, [#337](https://github.com/DGtal-team/DGtalTools/pull/337)).
+    - Fix PointVector implicit conversion (in link to DGtal PR #1345)
+      (Bertrand Kerautret and David Coeurjolly
+      [#347](https://github.com/DGtal-team/DGtalTools/pull/347))
+    - Fix Documentation nightly update on github website.
+      (Bertrand Kerautret
+      [#348](https://github.com/DGtal-team/DGtalTools/pull/348))
+    - CMake exposes boost static option.
+      (Bertrand Kerautret
+      [#351](https://github.com/DGtal-team/DGtalTools/pull/351))
+    - Fix compilation and execution with Visual Studio for volSurfaceRegularization.
+      (Raphael Lenain
+      [#353](https://github.com/DGtal-team/DGtalTools/pull/353))
+      
 - *volumetric*
     - New tool to fill the interior of a voxel set (volFillInterior).
       (David  Coeurjolly,[#343](https://github.com/DGtal-team/DGtalTools/pull/334)).
@@ -10,10 +27,14 @@
       [recent changes in DGtal](https://github.com/DGtal-team/DGtal/pull/1369).
       (Pablo Hernandez, [#345](https://github.com/DGtal-team/DGtalTools/pull/345))
 
+- *estimators*
+    - New option for 3dCurveTangentEstimator which allows to detect the principal curve direction
+      (Kacper Pluta, [#342](https://github.com/DGtal-team/DGtalTools/pull/342))
+
+
 # DGtalTools 0.9.4
 
 - *converters*
-
    - mesh2vol: add option to add margin in the generated volume
      (to better extract the surfel boudary near domain limits).  
      (Bertrand Kerautret, [#322](https://github.com/DGtal-team/DGtalTools/pull/322))

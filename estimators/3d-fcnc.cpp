@@ -513,12 +513,12 @@ int main( int argc, char** argv )
 				       ( "zero-tic", zt ) );
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = cmap_kappa( kappa0[ i ] );
-	SH::saveOBJ( pos0, muDir0, vthickness, getSimplifiedColorMap( colors ), outputfile+"-dir0.obj" );
+	SH::saveVectorFieldOBJ( pos0, muDir0, vthickness, getSimplifiedColorMap( colors ), outputfile+"-dir0.obj" );
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = cmap_kappa( kappa1[ i ] );
-	SH::saveOBJ( pos1, muDir1, vthickness, getSimplifiedColorMap( colors ), outputfile+"-dir1.obj" );
+	SH::saveVectorFieldOBJ( pos1, muDir1, vthickness, getSimplifiedColorMap( colors ), outputfile+"-dir1.obj" );
 	// normal direction, color has no meaning
-	SH::saveOBJ( pos2, muDir2, vthickness, SH::Colors(),
+	SH::saveVectorFieldOBJ( pos2, muDir2, vthickness, SH::Colors(),
 		     outputfile+"-dir2.obj", SH::Color::Black, SH::Color::Blue );
 	const auto colormap0 = SH::getColorMap( min0, max0,
 						params( "colormap", colormap_name ) );
@@ -565,11 +565,11 @@ int main( int argc, char** argv )
 	  }
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = cmap_kappa( kappa0[ i ] );
-	SH::saveOBJ( pos0, muDir0, vthickness, colors, outputfile+"-qproj-dir0.obj" );
+	SH::saveVectorFieldOBJ( pos0, muDir0, vthickness, colors, outputfile+"-qproj-dir0.obj" );
         for ( SH::Idx i = 0; i < colors.size(); i++ )
 	  colors[ i ] = cmap_kappa( kappa1[ i ] );
-	SH::saveOBJ( pos1, muDir1, vthickness, colors, outputfile+"-qproj-dir1.obj" );
-	SH::saveOBJ( pos2, muDir2, vthickness, SH::Colors(),
+	SH::saveVectorFieldOBJ( pos1, muDir1, vthickness, colors, outputfile+"-qproj-dir1.obj" );
+	SH::saveVectorFieldOBJ( pos2, muDir2, vthickness, SH::Colors(),
 		     outputfile+"-qproj-dir2.obj", SH::Color::Black,
 		     SH::Color::Blue );
 	}
