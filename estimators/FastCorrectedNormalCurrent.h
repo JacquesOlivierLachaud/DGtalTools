@@ -114,7 +114,7 @@ namespace DGtal
 
     /// Default constructor. The object is invalid.
     FastCorrectedNormalCurrent()
-      : theSurface( nullptr ) {}
+      : theSurface( nullptr ), myCrisp( false ), myInterpolate( false ) {}
 
     /**
        Constructor from surface. The surface is shared by the
@@ -132,7 +132,7 @@ namespace DGtal
     */
     FastCorrectedNormalCurrent( Alias<Surface> surface,
 				Scalar h = 1.0, bool crisp = false )
-      : theSurface( surface )
+      : theSurface( surface ), myInterpolate( false )
     {
       setParams( h, crisp );
       trace.info() << "computeTrivialNormals" << std::endl;
@@ -182,6 +182,30 @@ namespace DGtal
       computeTrivialNormals();
       setCorrectedNormals( myTrivialNormals );
       computeCellCentroids();
+    }
+
+    /// Tells if the normal vector field should be interpolated. In
+    /// this case, it computes the normal at pointels from the current
+    /// given corrected vector field.
+    ///
+    /// @param interpolate when 'true', use interpolated corrected
+    /// normals, when 'false', use constant per face corrected
+    /// normals.
+    void setInterpolationMode( bool interpolate )
+    {
+      myInterpolate = interpolate;
+      if ( ! myInterpolate ) return;
+      const Face nbf = theSurface->nbFaces();
+      myCorrectedNormalsAtPointels.resize( nbf );
+      // For each face (ie pointels), look for the incident vertices (ie
+      // surfels) and average their normals.
+      for ( Face f = 0; f < nbf; ++f ) {
+	RealVector nv;
+	auto vtcs = theSurface->verticesAroundFace( f );
+	for ( auto v : vtcs ) 
+	  nv += myCorrectedNormals[ v ];
+	myCorrectedNormalsAtPointels[ f ] = nv / vtcs.size();
+      }
     }
     
     /// @return the Khalimsky space associated with this current.
@@ -262,6 +286,8 @@ namespace DGtal
     void setCorrectedNormals( const NormalVectorField& nvf )
     {
       myCorrectedNormals = nvf;
+      // Forces recomputation of normals if interpolation mode is set.
+      if ( myInterpolate ) setInterpolationMode( true );
     }
 
     /// Sets the corrected normal vector field of the current.
@@ -279,6 +305,8 @@ namespace DGtal
 	    trace.warning() << "[FastCorrectedNormalCurrent::setCorrectedNormals]"
 			    << " Surfel " << *itS << " is not in the surface." << std::endl;
 	}
+      // Forces recomputation of normals if interpolation mode is set.
+      if ( myInterpolate ) setInterpolationMode( true );
     }
 
     
@@ -320,7 +348,7 @@ namespace DGtal
     }
 
 
-    // ----------------------- Indexed Digital Surface services --------------------------
+    // ----------------------- Indexed Digital Surface services --------------------
   public:
 
     /// @param[in] v any vertex index.
@@ -924,12 +952,16 @@ namespace DGtal
     Scalar                   myH;
     /// Specifies how intersection are computed.
     bool                     myCrisp;
+    /// Specifies if the normal vector field is linearly interpolated.
+    bool                     myInterpolate;
     /// The standard embedding with gridstep h.
     RegularPointEmbedder<Space> myEmbedder;
     /// The natural normal vector field.
     NormalVectorField        myTrivialNormals;
     /// The corrected normal vector field.
     NormalVectorField        myCorrectedNormals;
+    /// The corrected normal vector field at pointels.
+    NormalVectorField        myCorrectedNormalsAtPointels;
     /// The map vertex -> centroid (to limit computations).
     CentroidMap              myVertexCentroids;
     /// The map arc -> centroid (to limit computations).
