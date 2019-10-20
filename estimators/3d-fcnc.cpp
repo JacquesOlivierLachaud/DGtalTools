@@ -138,7 +138,8 @@ int main( int argc, char** argv )
   general_opt.add_options()
     ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), MuXY is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." )
     ( "anisotropy", po::value<std::string>()->default_value( "NMult" ), "tells how is symmetrized the anisotropic measure mu_XY, in Mult|Add|NMult|NAdd: Mult forces symmetry by M*M^t, Add forces symmetry by 0.5*(M+M^t)+NxN, NMult and NAdd normalized by the area.")
-    ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." );
+    ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." )
+    ( "interpolate,I", "when specified, it interpolate the given corrected normal vector field and uses the corresponding measures." );
   EH::optionsDisplayValues   ( general_opt );
   general_opt.add_options()
     ( "zero-tic", po::value<double>()->default_value( 0.0 ), "adds a black band around zero of given thickness in colormaps." );
@@ -348,8 +349,11 @@ int main( int argc, char** argv )
       trace.beginBlock( "Compute corrected normal current" );
       Current C( *idx_surface, h, vm.count( "crisp" ) );
       C.setCorrectedNormals( dft_surfels.begin(), dft_surfels.end(), measured_normals.begin() );
+      C.setInterpolationMode( vm.count( "interpolate" ) );
       trace.info() << C << " m-ball-r = " << mr << "(continuous)"
 		   << " " << (mr/h) << " (discrete)" << std::endl;
+      trace.info() << "Interpolation mode is "
+		   << ( vm.count( "interpolate" ) ? "ON" : "OFF" ) << std::endl;
       double              area = 0.0;
       double              intG = 0.0;
       std::vector<double> mu0( dft_surfels.size() );
@@ -474,9 +478,9 @@ int main( int argc, char** argv )
 	  stat_measured_curv.terminate();
 	  trace.info() << "- CNC area      = " << area << std::endl;
 	  trace.info() << "- CNC total G   = " << intG << std::endl;
-	  trace.info() << "- CNC curv: avg = " << stat_measured_curv.mean() << std::endl;
-	  trace.info() << "- CNC curv: min = " << stat_measured_curv.min() << std::endl;
-	  trace.info() << "- CNC curv: max = " << stat_measured_curv.max() << std::endl;
+	  trace.info() << "- CNC mu: avg = " << stat_measured_curv.mean() << std::endl;
+	  trace.info() << "- CNC mu: min = " << stat_measured_curv.min() << std::endl;
+	  trace.info() << "- CNC mu: max = " << stat_measured_curv.max() << std::endl;
 	}
       time_curv_estimations = trace.endBlock();
       if ( quantity == "MuXY" ) {

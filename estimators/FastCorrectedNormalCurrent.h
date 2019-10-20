@@ -204,7 +204,8 @@ namespace DGtal
 	auto vtcs = theSurface->verticesAroundFace( f );
 	for ( auto v : vtcs ) 
 	  nv += myCorrectedNormals[ v ];
-	myCorrectedNormalsAtPointels[ f ] = nv / vtcs.size();
+	myCorrectedNormalsAtPointels[ f ]
+	  = ( nv.norm() != 0.0 ) ? nv / nv.norm() : nv;
       }
     }
     
@@ -315,21 +316,42 @@ namespace DGtal
     {
       myMu0.resize( theSurface->nbVertices() );
       auto vtcs = theSurface->allVertices();
-      for ( auto v : vtcs ) myMu0[ v ] = computeMu0( v );
+      if ( ! myInterpolate )
+	for ( auto v : vtcs ) myMu0[ v ] = computeMu0( v );
+      else
+	for ( auto v : vtcs ) myMu0[ v ] = computeInterpolatedMu0( v );
     }
-    /// Computes all measures mu1 per arc.
+    /// Computes all measures mu1 per arc or per vertex (in interpolation mode).
     void computeAllMu1()
     {
-      myMu1.resize( theSurface->nbArcs() );
-      auto arcs = theSurface->allArcs();
-      for ( auto a : arcs ) myMu1[ a ] = computeMu1( a );
+      if ( ! myInterpolate )
+	{
+	  myMu1.resize( theSurface->nbArcs() );
+	  auto arcs = theSurface->allArcs();
+	  for ( auto a : arcs ) myMu1[ a ] = computeMu1( a );
+	}
+      else
+	{
+	  myMu1.resize( theSurface->nbVertices() );
+	  auto vtcs = theSurface->allVertices();
+	  for ( auto v : vtcs ) myMu1[ v ] = computeInterpolatedMu1( v );
+	}
     }
-    /// Computes all measures mu2 per face.
+    /// Computes all measures mu2 per face or per vertex (in interpolation mode)..
     void computeAllMu2()
     {
-      myMu2.resize( theSurface->nbFaces() );
-      auto faces = theSurface->allFaces();
-      for ( auto f : faces ) myMu2[ f ] = computeMu2( f );
+      if ( ! myInterpolate )
+	{
+	  myMu2.resize( theSurface->nbFaces() );
+	  auto faces = theSurface->allFaces();
+	  for ( auto f : faces ) myMu2[ f ] = computeMu2( f );
+	}
+      else
+	{
+	  myMu2.resize( theSurface->nbVertices() );
+	  auto vtcs = theSurface->allVertices();
+	  for ( auto v : vtcs ) myMu2[ v ] = computeInterpolatedMu2( v );
+	}
     }
     /// Computes all measures muOmega per face.
     void computeAllMuOmega()
@@ -420,6 +442,8 @@ namespace DGtal
     
     
     /// Computes the d-dimensional Hausdorff measure of a d-dimensional cell.
+    /// @param d the dimension of the cell
+    /// @return its Hausdorff measure (1 for points, h for linels, h^2 for surfels, etc)
     Scalar Hmeasure( Dimension d ) const
     {
       Scalar H = 1.0;
@@ -427,11 +451,31 @@ namespace DGtal
       return H;
     }
 
+    /// Computes an approximation of the relative intersection of the
+    /// ball of radius \a r and center \a p with the given cell. Cells
+    /// are embedded naturally in the grid of step h.
+    ///
+    /// @param p the center of the ball.
+    /// @param r the radius of the ball.
+    /// @param c any oriented cell of the space.
+    ///
+    /// @return the relative intersection as a scalar between 0 (no
+    /// intersection) and 1 (inclusion).
     Scalar sRelativeIntersection( RealPoint p, Scalar r, SCell c )
     {
       return relativeIntersection( p, r, space().unsigns( c ) );
     }
 
+    /// Computes an approximation of the crisp intersection of the
+    /// ball of radius \a r and center \a p with the given cell. Cells
+    /// are embedded naturally in the grid of step h.
+    ///
+    /// @param p the center of the ball.
+    /// @param r the radius of the ball.
+    /// @param c any oriented cell of the space.
+    ///
+    /// @return the crisp intersection as the scalar 0 (no
+    /// intersection) and 1 (intersection).
     Scalar sCrispIntersection( RealPoint p, Scalar r, SCell c )
     {
       return crispIntersection( p, r, space().unsigns( c ) );
@@ -440,6 +484,10 @@ namespace DGtal
     /// Computes an approximation of the relative intersection of the
     /// ball of radius \a r and center \a p with the given cell. Cells
     /// are embedded naturally in the grid of step h.
+    ///
+    /// @param p the center of the ball.
+    /// @param r the radius of the ball.
+    /// @param c any unsigned cell of the space.
     ///
     /// @return the relative intersection as a scalar between 0 (no
     /// intersection) and 1 (inclusion).
@@ -468,6 +516,10 @@ namespace DGtal
     /// ball of radius \a r and center \a p with the given cell. Cells
     /// are embedded naturally in the grid of step h.
     ///
+    /// @param p the center of the ball.
+    /// @param r the radius of the ball.
+    /// @param c any unsigned cell of the space.
+    ///
     /// @return the crisp intersection as the scalar 0 (no
     /// intersection) and 1 (intersection).
     Scalar crispIntersection( RealPoint p, Scalar r, Cell c )
@@ -494,14 +546,30 @@ namespace DGtal
     /// \f$ \mu_0 \f$ Lipschitz-Killing measure. It corresponds to a
     /// corrected area measure, and is non null only on 2-cells (or Vertex).
     ///
-    /// @param[in] c any 2-dimensional cell (or a Vertex in 3D digital
+    /// @param[in] v any 2-dimensional cell (or a Vertex in 3D digital
     /// surfaces).
     ///
     /// @return the corrected area measure \f$ \mu_0 := \cos \alpha
     /// d\mathcal{H}^2 \f$.
-    Scalar computeMu0( Vertex c )
+    Scalar computeMu0( Vertex v )
     {
-      return Hmeasure( 2 ) * myTrivialNormals[ c ].dot( myCorrectedNormals[ c ] );
+      return Hmeasure( 2 ) * myTrivialNormals[ v ].dot( myCorrectedNormals[ v ] );
+    }
+
+    /// \f$ \mu_0 \f$ Lipschitz-Killing measure. It corresponds to a
+    /// corrected interpolated area measure, and is non null only on
+    /// 2-cells (or Vertex).
+    ///
+    /// @param[in] v any 2-dimensional cell (or a Vertex in 3D digital
+    /// surfaces).
+    ///
+    /// @return the corrected interpolated area measure \f$ \mu_0 \f$.
+    Scalar computeInterpolatedMu0( Vertex v )
+    {
+      RealVector a, b, c, d;
+      Dimension z = getInterpolatedCorrectedNormals( a, b, c, d, v );
+      return 0.25 * Hmeasure( 2 ) * ( a[ z ] + b[ z ] + c[ z ] + d[ z ] )
+	* myTrivialNormals[ v ][ z ];
     }
 
     /// \f$ \mu_1 \f$ Lipschitz-Killing measure. It corresponds to a
@@ -580,6 +648,29 @@ namespace DGtal
       return  Hmeasure( 1 ) * info.psi * info.e.dot( info.e1 );
     }
 
+    /// \f$ \mu_1 \f$ Lipschitz-Killing measure. It corresponds to a
+    /// corrected interpolated mean curvature measure, and is non null only on
+    /// 2-cells (or Vertex) since corrected normals are smooth.
+    ///
+    /// @param[in] v any 2-dimensional cell (or a Vertex in 3D digital
+    /// surfaces).
+    ///
+    /// @return the corrected interpolated mean curvature measure \f$ \mu_1 \f$.
+    Scalar computeInterpolatedMu1( Vertex v )
+    {
+      RealVector a, b, c, d;
+      Dimension z = getInterpolatedCorrectedNormals( a, b, c, d, v );
+      Dimension x = (z+1) % 3;
+      Dimension y = (z+2) % 3;
+      return
+	( (   2.*b[ x ] + d[ x ] + 2.*c[ y ] + d[ y ] ) * a[ z ]
+	  - ( a[ x ] + 2.*c[ x ] + a[ y ] + 2.*b[ y ] ) * d[ z ]
+	  + ( b[ x ] + 2.*d[ x ] - 2.*a[ y ] - b[ y ] ) * c[ z ]
+	  - ( 2.*a[ x ] + c[ x ] - c[ y ] - 2.*d[ y ] ) * b[ z ] )
+	* myTrivialNormals[ v ][ z ] * Hmeasure( 1 ) / 6.0;
+      // JOL: Weirdly, I had to multiply by H1 instead of H2 !
+    }
+    
     /// \f$ \mu_2 \f$ Lipschitz-Killing measure. It corresponds to a
     /// measure of Gaussian curvature, since normal vectors form a cone
     /// around a vertex, and is non null only on 0-cells (or Face). The
@@ -631,6 +722,28 @@ namespace DGtal
       return S;
     }
 
+    /// \f$ \mu_2 \f$ Lipschitz-Killing measure. It corresponds to a
+    /// corrected interpolated Gaussian curvature measure, and is non null only on
+    /// 2-cells (or Vertex) since corrected normals are smooth.
+    ///
+    /// @param[in] v any 2-dimensional cell (or a Vertex in 3D digital
+    /// surfaces).
+    ///
+    /// @return the corrected interpolated Gaussian curvature measure \f$ \mu_2 \f$.
+    Scalar computeInterpolatedMu2( Vertex v )
+    {
+      RealVector a, b, c, d;
+      Dimension z = getInterpolatedCorrectedNormals( a, b, c, d, v );
+      Dimension x = (z+1) % 3;
+      Dimension y = (z+2) % 3;
+      return
+	( ((b[x] + d[x])*c[y] - (c[x] + d[x])*b[y] - (c[x] - b[x])*d[y])*a[z]
+	  - ((b[x] + d[x])*a[y] - (a[x] - d[x])*b[y] - (a[x] + b[x])*d[y])*c[z]
+	  + ((c[x] + d[x])*a[y] - (a[x] - d[x])*c[y] - (a[x] + c[x])*d[y])*b[z]
+	  + ((c[x] - b[x])*a[y] - (a[x] + b[x])*c[y] + (a[x] + c[x])*b[y])*d[z] )
+	* myTrivialNormals[ v ][ z ] * 0.25;
+    }
+    
     /// \f$ \mu_Omega \f$ Lipschitz-Killing measure, i.e. the measure
     /// associated to the symplectic form. It corresponds to a measure
     /// of the inconcistency between the given normal field and the
@@ -766,6 +879,15 @@ namespace DGtal
       return ri != 0.0 ? ri * mu0( c ) : 0.0;
     }
 
+    Scalar interpolatedMu1( RealPoint p, Scalar r, Vertex c )
+    {
+      SCell aSurfel = theSurface->surfel( c );
+      Scalar     ri = myCrisp
+	? sCrispIntersection( p, r, aSurfel )
+	: sRelativeIntersection( p, r, aSurfel );
+      return ri != 0.0 ? ri * myMu1[ c ] : 0.0;
+    }
+
     Scalar mu1( RealPoint p, Scalar r, Arc a )
     {
       SCell aLinel = theSurface->linel( a ); // oriented 1-cell
@@ -782,6 +904,15 @@ namespace DGtal
 	? sCrispIntersection( p, r, aPointel )
 	: sRelativeIntersection( p, r, aPointel );
       return ri != 0.0 ? ri * mu2( f ) : 0.0;
+    }
+
+    Scalar interpolatedMu2( RealPoint p, Scalar r, Vertex c )
+    {
+      SCell aSurfel = theSurface->surfel( c );
+      Scalar     ri = myCrisp
+	? sCrispIntersection( p, r, aSurfel )
+	: sRelativeIntersection( p, r, aSurfel );
+      return ri != 0.0 ? ri * myMu2[ c ] : 0.0;
     }
 
     Scalar muOmega( RealPoint p, Scalar r, Arc a )
@@ -884,25 +1015,35 @@ namespace DGtal
 
     Scalar mu1Ball( Vertex vc, Scalar r )
     {
-      ArcRange    arcs = getArcsInBall( vc, r );
       Scalar        m1 = 0.0;
       RealPoint      x = myVertexCentroids[ vc ];
-      for ( auto a : arcs ) {
-	m1      += mu1( x, r, a ); 
-      }
+      if ( ! myInterpolate )
+	{
+	  ArcRange    arcs = getArcsInBall( vc, r );
+	  for ( auto a : arcs ) m1 += mu1( x, r, a ); 
+	}
+      else
+	{
+	  VertexRange vtcs = getVerticesInBall( vc, r );
+	  for ( auto v : vtcs ) m1 += interpolatedMu1( x, r, v ); 
+	}
       return m1;
     }
 
     Scalar mu2Ball( Vertex vc, Scalar r )
     {
-      // std::cout << "mu2ball c=" << c << " r=" << r << std::endl;
-      FaceRange  faces = getFacesInBall( vc, r );
-      // std::cout << "mu2ball #faces=" << faces.size() << std::endl;
       Scalar        m2 = 0.0;
       RealPoint      x = myVertexCentroids[ vc ];
-      for ( auto f : faces ) {
-	m2      += mu2( x, r, f ); 
-      }
+      if ( ! myInterpolate )
+	{
+	  FaceRange  faces = getFacesInBall( vc, r );
+	  for ( auto f : faces ) m2 += mu2( x, r, f ); 
+	}
+      else
+	{
+	  VertexRange vtcs = getVerticesInBall( vc, r );
+	  for ( auto v : vtcs ) m2 += interpolatedMu2( x, r, v ); 
+	}
       return m2;
     }
 
@@ -926,6 +1067,38 @@ namespace DGtal
 	mT      += anisotropicMu( x, r, a ); 
       }
       return mT;
+    }
+
+    /// Given some surfel/vertex \a v, outputs its four interpolated
+    /// normals and returns its orthogonal direction.
+    ///
+    /// Let us denote z the orthogonal direction, then (x,y,z) is an even
+    /// permutation of (0,1,2). Let p be the pointel with smallest (x,y) coordinate.
+    ///
+    /// @param[inout] a the normal at pointel p
+    /// @param[inout] b the normal at pointel p+x
+    /// @param[inout] c the normal at pointel p+y
+    /// @param[inout] d the normal at pointel p+x+y
+    /// @param[in] any vertex/surfel of the surface
+    /// @return the orthogonal direction to surfel \a v, a number in {0,1,2}.
+    Dimension getInterpolatedCorrectedNormals( RealVector& a, RealVector& b,
+					       RealVector& c, RealVector& d,
+					       Vertex v ) const
+    {
+      const Surfel&   s = surfel( v );
+      const Dimension z = space().sOrthDir( s );
+      const Dimension x = (z+1) % 3;
+      const Dimension y = (z+2) % 3;
+      const Point    pt = space().sCoords( s );
+      const SCell     p = space().sPointel( pt );
+      const SCell    px = space().sGetIncr( p, x );
+      const SCell    py = space().sGetIncr( p, y );
+      const SCell   pxy = space().sGetIncr( px, y );
+      a = myCorrectedNormalsAtPointels[ getFace( p ) ];
+      b = myCorrectedNormalsAtPointels[ getFace( px ) ];
+      c = myCorrectedNormalsAtPointels[ getFace( py ) ];
+      d = myCorrectedNormalsAtPointels[ getFace( pxy ) ];
+      return z;
     }
     
     // ----------------------- Interface --------------------------------------
