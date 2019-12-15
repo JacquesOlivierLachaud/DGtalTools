@@ -364,9 +364,18 @@ namespace DGtal
     /// Computes all anisotropic measures per arc.
     void computeAllAnisotropicMu()
     {
-      myAnisotropicMu.resize( theSurface->nbArcs() );
-      auto arcs = theSurface->allArcs();
-      for ( auto a : arcs ) myAnisotropicMu[ a ] = computeAnisotropicMu( a );
+      if ( ! myInterpolate )
+	{
+	  myAnisotropicMu.resize( theSurface->nbArcs() );
+	  auto arcs = theSurface->allArcs();
+	  for ( auto a : arcs ) myAnisotropicMu[ a ] = computeAnisotropicMu( a );
+	}
+      else
+	{
+	  myAnisotropicMu.resize( theSurface->nbVertices() );
+	  auto vtcs = theSurface->allVertices();
+	  for ( auto v : vtcs ) myAnisotropicMu[ v ] = computeInterpolatedAnisotropicMu( v );
+	}
     }
 
 
@@ -856,6 +865,49 @@ namespace DGtal
       }
       return T;
     }
+
+    /// Anisotropic curvature measure. It is a 3x3 tensor that more or
+    /// less describes the curvature tensor.
+    ///
+    /// @param[in] v any 2-dimensional cell (or a Vertex in 3D digital
+    /// surfaces).
+    ///
+    /// @return the anisotropic curvature measure along the \a arc.
+    RealTensor computeInterpolatedAnisotropicMu( Vertex v )
+    {
+      RealVector a, b, c, d;
+      Dimension z = getInterpolatedCorrectedNormals( a, b, c, d, v );
+      Dimension x = (z+1) % 3;
+      Dimension y = (z+2) % 3;
+      const double ax = a[x], ay = a[y], az = a[z];
+      const double bx = b[x], by = b[y], bz = b[z];
+      const double cx = c[x], cy = c[y], cz = c[z];
+      const double dx = d[x], dy = d[y], dz = d[z];
+      double T[3][3];
+      T[0][0] = (2*ax + cx - 2*bx - dx)*az + (ax + 2*cx - bx - 2*dx)*cz + (2*ax + cx - 2*bx - dx)*bz + (ax + 2*cx - bx - 2*dx)*dz;
+      //T[0][1] = (2*ay + cy - 2*by - dy)*az + (ay + 2*cy - by - 2*dy)*cz + (2*ay + cy - 2*by - dy)*bz + (ay + 2*cy - by - 2*dy)*dz;
+      // T[0][2] = 2.0*(az*az + az*cz + cz*cz - bz*bz - bz*dz - dz*dz);
+      T[1][0] = (2*ax - 2*cx + bx - dx)*az + (2*ax - 2*cx + bx - dx)*cz + (ax - cx + 2*bx - 2*dx)*bz + (ax - cx + 2*bx - 2*dx)*dz;
+      T[1][1] = (2*ay - 2*cy + by - dy)*az + (2*ay - 2*cy + by - dy)*cz + (ay - cy + 2*by - 2*dy)*bz + (ay - cy + 2*by - 2*dy)*dz;
+      // T[1][2] = 2.0*(az*az - cz*cz + az*bz + bz*bz - cz*dz - dz*dz);
+      T[2][0] = 2.0*( - ax*ax - ax*cx - cx*cx + bx*bx + bx*dx + dx*dx ) - (2*ax - 2*cx + bx - dx)*ay - (2*ax - 2*cx + bx - dx)*cy - (ax - cx + 2*bx - 2*dx)*by - (ax - cx + 2*bx - 2*dx)*dy;
+      T[2][1] = -(2*ax + cx + 2*bx + dx)*ay - 2.0*ay*ay - (ax + 2*cx + bx + 2*dx)*cy + 2.0*cy*cy + (2*ax + cx + 2*bx + dx - 2*ay)*by - 2.0*by*by + (ax + 2*cx + bx + 2*dx + 2*cy)*dy + 2.0*dy*dy;
+      T[2][2] = -(2*ax + cx + 2*bx + dx + 2*ay + 2*cy + by + dy)*az - (ax + 2*cx + bx + 2*dx - 2*ay - 2*cy - by - dy)*cz + (2*ax + cx + 2*bx + dx - ay - cy - 2*by - 2*dy)*bz + (ax + 2*cx + bx + 2*dx + ay + cy + 2*by + 2*dy)*dz;
+      T[0][1] = T[1][0];
+      T[0][2] = T[2][0];
+      T[1][2] = T[2][1];
+      // T[1][0] = T[0][1];
+      // T[2][0] = T[0][2];
+      // T[2][1] = T[1][2];
+      RealTensor RT;
+      Scalar h12 = Hmeasure( 1 ) / 12.0; 
+      for ( Dimension i = 0; i < 3; ++i ) {
+	for ( Dimension j = 0; j < 3; ++j ) {
+	  RT.setComponent( i, j, h12 * T[ i ][ j ] );
+	}
+      }
+      return RT;
+    }
     
     /// Anisotropic curvature measure. It is a 3x3 tensor that more or
     /// less describes the curvature tensor.
@@ -931,6 +983,15 @@ namespace DGtal
 	? sCrispIntersection( p, r, aLinel )
 	: sRelativeIntersection( p, r, aLinel );
       return ( ri != 0.0 ) ? ( ri * anisotropicMu( a ) ) : RealTensor();
+    }
+
+    RealTensor interpolatedAnisotropicMu( RealPoint p, Scalar r, Vertex c )
+    {
+      SCell aSurfel = theSurface->surfel( c );
+      Scalar     ri = myCrisp
+	? sCrispIntersection( p, r, aSurfel )
+	: sRelativeIntersection( p, r, aSurfel );
+      return ( ri != 0.0 ) ? ( ri * myAnisotropicMu[ c ] ) : RealTensor();
     }
 
     
@@ -1060,12 +1121,18 @@ namespace DGtal
 
     RealTensor anisotropicMuBall( Vertex vc, Scalar r )
     {
-      ArcRange    arcs = getArcsInBall( vc, r );
       RealTensor    mT = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, };
       RealPoint      x = myVertexCentroids[ vc ];
-      for ( auto a : arcs ) {
-	mT      += anisotropicMu( x, r, a ); 
-      }
+      if ( ! myInterpolate )
+	{
+	  ArcRange    arcs = getArcsInBall( vc, r );
+	  for ( auto a : arcs ) mT += anisotropicMu( x, r, a ); 
+	}
+      else
+	{
+	  VertexRange vtcs = getVerticesInBall( vc, r );
+	  for ( auto v : vtcs ) mT += interpolatedAnisotropicMu( x, r, v ); 
+	}
       return mT;
     }
 
