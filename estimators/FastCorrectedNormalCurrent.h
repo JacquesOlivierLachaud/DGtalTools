@@ -877,30 +877,59 @@ namespace DGtal
     {
       RealVector a, b, c, d;
       Dimension z = getInterpolatedCorrectedNormals( a, b, c, d, v );
-      Dimension x = (z+1) % 3;
-      Dimension y = (z+2) % 3;
+      const Surfel&   s = surfel( v );
+      const bool   zdir = space().sDirect( s, z );
+      // const Dimension x = zdir ? (z+1) % 3 : (z+2) % 3;
+      // const Dimension y = zdir ? (z+2) % 3 : (z+1) % 3;
+      const Dimension x = (z+1) % 3;
+      const Dimension y = (z+2) % 3;
+      // const double ax = zdir ? a[x] : c[x], ay = zdir ? a[y] : c[y], az = zdir ? a[z] : c[z];
+      // const double bx = zdir ? b[x] : d[x], by = zdir ? b[y] : d[y], bz = zdir ? b[z] : d[z];
+      // const double cx = zdir ? c[x] : a[x], cy = zdir ? c[y] : a[y], cz = zdir ? c[z] : a[z];
+      // const double dx = zdir ? d[x] : b[x], dy = zdir ? d[y] : b[y], dz = zdir ? d[z] : b[z];
       const double ax = a[x], ay = a[y], az = a[z];
       const double bx = b[x], by = b[y], bz = b[z];
       const double cx = c[x], cy = c[y], cz = c[z];
       const double dx = d[x], dy = d[y], dz = d[z];
       double T[3][3];
-      T[0][0] = (2*ax + cx - 2*bx - dx)*az + (ax + 2*cx - bx - 2*dx)*cz + (2*ax + cx - 2*bx - dx)*bz + (ax + 2*cx - bx - 2*dx)*dz;
-      //T[0][1] = (2*ay + cy - 2*by - dy)*az + (ay + 2*cy - by - 2*dy)*cz + (2*ay + cy - 2*by - dy)*bz + (ay + 2*cy - by - 2*dy)*dz;
-      // T[0][2] = 2.0*(az*az + az*cz + cz*cz - bz*bz - bz*dz - dz*dz);
-      T[1][0] = (2*ax - 2*cx + bx - dx)*az + (2*ax - 2*cx + bx - dx)*cz + (ax - cx + 2*bx - 2*dx)*bz + (ax - cx + 2*bx - 2*dx)*dz;
-      T[1][1] = (2*ay - 2*cy + by - dy)*az + (2*ay - 2*cy + by - dy)*cz + (ay - cy + 2*by - 2*dy)*bz + (ay - cy + 2*by - 2*dy)*dz;
-      // T[1][2] = 2.0*(az*az - cz*cz + az*bz + bz*bz - cz*dz - dz*dz);
-      T[2][0] = 2.0*( - ax*ax - ax*cx - cx*cx + bx*bx + bx*dx + dx*dx ) - (2*ax - 2*cx + bx - dx)*ay - (2*ax - 2*cx + bx - dx)*cy - (ax - cx + 2*bx - 2*dx)*by - (ax - cx + 2*bx - 2*dx)*dy;
-      T[2][1] = -(2*ax + cx + 2*bx + dx)*ay - 2.0*ay*ay - (ax + 2*cx + bx + 2*dx)*cy + 2.0*cy*cy + (2*ax + cx + 2*bx + dx - 2*ay)*by - 2.0*by*by + (ax + 2*cx + bx + 2*dx + 2*cy)*dy + 2.0*dy*dy;
-      T[2][2] = -(2*ax + cx + 2*bx + dx + 2*ay + 2*cy + by + dy)*az - (ax + 2*cx + bx + 2*dx - 2*ay - 2*cy - by - dy)*cz + (2*ax + cx + 2*bx + dx - ay - cy - 2*by - 2*dy)*bz + (ax + 2*cx + bx + 2*dx + ay + cy + 2*by + 2*dy)*dz;
-      T[0][1] = T[1][0];
-      T[0][2] = T[2][0];
-      T[1][2] = T[2][1];
-      // T[1][0] = T[0][1];
-      // T[2][0] = T[0][2];
-      // T[2][1] = T[1][2];
+
+      T[x][x]=1.0/12.0*(2.0*ax + cx - 2.0*bx - dx)*az + 1.0/12.0*(ax + 2.0*cx - bx - 2.0*dx)*cz + 1.0/12.0*(2.0*ax + cx - 2.0*bx - dx)*bz + 1.0/12.0*(ax + 2.0*cx - bx - 2.0*dx)*dz;
+      T[y][x]=1.0/12.0*(2.0*ax - 2.0*cx + bx - dx)*az + 1.0/12.0*(2.0*ax - 2.0*cx + bx - dx)*cz + 1.0/12.0*(ax - cx + 2.0*bx - 2.0*dx)*bz + 1.0/12.0*(ax - cx + 2.0*bx - 2.0*dx)*dz;
+      T[z][x]=-1.0/6.0*ax*ax - 1.0/6.0*ax*cx - 1.0/6.0*cx*cx + 1.0/6.0*bx*bx + 1.0/6.0*bx*dx + 1.0/6.0*dx*dx - 1.0/12.0*(2.0*ax - 2.0*cx + bx - dx)*ay - 1.0/12.0*(2.0*ax - 2.0*cx + bx - dx)*cy - 1.0/12.0*(ax - cx + 2.0*bx - 2.0*dx)*by - 1.0/12.0*(ax - cx + 2.0*bx - 2.0*dx)*dy;
+      T[x][y]=1.0/12.0*(2.0*ay + cy - 2.0*by - dy)*az + 1.0/12.0*(ay + 2.0*cy - by - 2.0*dy)*cz + 1.0/12.0*(2.0*ay + cy - 2.0*by - dy)*bz + 1.0/12.0*(ay + 2.0*cy - by - 2.0*dy)*dz;
+      T[y][y]=1.0/12.0*(2.0*ay - 2.0*cy + by - dy)*az + 1.0/12.0*(2.0*ay - 2.0*cy + by - dy)*cz + 1.0/12.0*(ay - cy + 2.0*by - 2.0*dy)*bz + 1.0/12.0*(ay - cy + 2.0*by - 2.0*dy)*dz;
+      T[z][y]=-1.0/12.0*(2.0*ax + cx + 2.0*bx + dx)*ay - 1.0/6.0*ay*ay - 1.0/12.0*(ax + 2.0*cx + bx + 2.0*dx)*cy + 1.0/6.0*cy*cy + 1.0/12.0*(2.0*ax + cx + 2.0*bx + dx - 2.0*ay)*by - 1.0/6.0*by*by + 1.0/12.0*(ax + 2.0*cx + bx + 2.0*dx + 2.0*cy)*dy + 1.0/6.0*dy*dy;
+      T[x][z]=1.0/6.0*az*az + 1.0/6.0*az*cz + 1.0/6.0*cz*cz - 1.0/6.0*bz*bz - 1.0/6.0*bz*dz - 1.0/6.0*dz*dz;
+      T[y][z]=1.0/6.0*az*az - 1.0/6.0*cz*cz + 1.0/6.0*az*bz + 1.0/6.0*bz*bz - 1.0/6.0*cz*dz - 1.0/6.0*dz*dz;
+      T[z][z]=-1.0/12.0*(2.0*ax + cx + 2.0*bx + dx + 2.0*ay + 2.0*cy + by + dy)*az - 1.0/12.0*(ax + 2.0*cx + bx + 2.0*dx - 2.0*ay - 2.0*cy - by - dy)*cz + 1.0/12.0*(2.0*ax + cx + 2.0*bx + dx - ay - cy - 2.0*by - 2.0*dy)*bz + 1.0/12.0*(ax + 2.0*cx + bx + 2.0*dx + ay + cy + 2.0*by + 2.0*dy)*dz;
+      if ( ! zdir )
+	{
+	  T[x][y] = -T[x][y];
+	  T[x][z] = -T[x][z];
+	  T[y][x] = -T[y][x];
+	  T[z][x] = -T[z][x];
+	}
+      std::cout << "[" << T[0][0] << " " << T[0][1] << " " << T[0][2] << "]";
+      std::cout << "[" << T[1][0] << " " << T[1][1] << " " << T[1][2] << "]";
+      std::cout << "[" << T[2][0] << " " << T[2][1] << " " << T[2][2] << "]";
+      // T[0][0] = (2*ax + cx - 2*bx - dx)*az + (ax + 2*cx - bx - 2*dx)*cz + (2*ax + cx - 2*bx - dx)*bz + (ax + 2*cx - bx - 2*dx)*dz;
+      // //T[0][1] = (2*ay + cy - 2*by - dy)*az + (ay + 2*cy - by - 2*dy)*cz + (2*ay + cy - 2*by - dy)*bz + (ay + 2*cy - by - 2*dy)*dz;
+      // // T[0][2] = 2.0*(az*az + az*cz + cz*cz - bz*bz - bz*dz - dz*dz);
+      // T[1][0] = (2*ax - 2*cx + bx - dx)*az + (2*ax - 2*cx + bx - dx)*cz + (ax - cx + 2*bx - 2*dx)*bz + (ax - cx + 2*bx - 2*dx)*dz;
+      // T[1][1] = (2*ay - 2*cy + by - dy)*az + (2*ay - 2*cy + by - dy)*cz + (ay - cy + 2*by - 2*dy)*bz + (ay - cy + 2*by - 2*dy)*dz;
+      // // T[1][2] = 2.0*(az*az - cz*cz + az*bz + bz*bz - cz*dz - dz*dz);
+      // T[2][0] = 2.0*( - ax*ax - ax*cx - cx*cx + bx*bx + bx*dx + dx*dx ) - (2*ax - 2*cx + bx - dx)*ay - (2*ax - 2*cx + bx - dx)*cy - (ax - cx + 2*bx - 2*dx)*by - (ax - cx + 2*bx - 2*dx)*dy;
+      // T[2][1] = -(2*ax + cx + 2*bx + dx)*ay - 2.0*ay*ay - (ax + 2*cx + bx + 2*dx)*cy + 2.0*cy*cy + (2*ax + cx + 2*bx + dx - 2*ay)*by - 2.0*by*by + (ax + 2*cx + bx + 2*dx + 2*cy)*dy + 2.0*dy*dy;
+      // T[2][2] = -(2*ax + cx + 2*bx + dx + 2*ay + 2*cy + by + dy)*az - (ax + 2*cx + bx + 2*dx - 2*ay - 2*cy - by - dy)*cz + (2*ax + cx + 2*bx + dx - ay - cy - 2*by - 2*dy)*bz + (ax + 2*cx + bx + 2*dx + ay + cy + 2*by + 2*dy)*dz;
+      // T[0][1] = T[1][0];
+      // T[0][2] = T[2][0];
+      // T[1][2] = T[2][1];
+      // // T[1][0] = T[0][1];
+      // // T[2][0] = T[0][2];
+      // // T[2][1] = T[1][2];
+      // Scalar h12 = Hmeasure( 1 ) / 12.0; 
       RealTensor RT;
-      Scalar h12 = Hmeasure( 1 ) / 12.0; 
+      Scalar h12 = Hmeasure( 1 );
       for ( Dimension i = 0; i < 3; ++i ) {
 	for ( Dimension j = 0; j < 3; ++j ) {
 	  RT.setComponent( i, j, h12 * T[ i ][ j ] );
@@ -1154,6 +1183,9 @@ namespace DGtal
     {
       const Surfel&   s = surfel( v );
       const Dimension z = space().sOrthDir( s );
+      const bool   zdir = space().sDirect( s, z );
+      // const Dimension x = zdir ? (z+1) % 3 : (z+2) % 3;
+      // const Dimension y = zdir ? (z+2) % 3 : (z+1) % 3;
       const Dimension x = (z+1) % 3;
       const Dimension y = (z+2) % 3;
       const Point    pt = space().sCoords( s );
@@ -1165,6 +1197,13 @@ namespace DGtal
       b = myCorrectedNormalsAtPointels[ getFace( px ) ];
       c = myCorrectedNormalsAtPointels[ getFace( py ) ];
       d = myCorrectedNormalsAtPointels[ getFace( pxy ) ];
+      // if ( ! zdir )
+      // 	{
+      // 	  a[ z ] = -a[ z ];
+      // 	  b[ z ] = -b[ z ];
+      // 	  c[ z ] = -c[ z ];
+      // 	  d[ z ] = -d[ z ];
+      // 	}
       return z;
     }
     
