@@ -897,6 +897,7 @@ namespace DGtal
       T[y][z]=1.0/6.0*az*az - 1.0/6.0*cz*cz + 1.0/6.0*az*bz + 1.0/6.0*bz*bz - 1.0/6.0*cz*dz - 1.0/6.0*dz*dz;
       T[z][z]=-1.0/12.0*(2.0*ax + cx + 2.0*bx + dx + 2.0*ay + 2.0*cy + by + dy)*az - 1.0/12.0*(ax + 2.0*cx + bx + 2.0*dx - 2.0*ay - 2.0*cy - by - dy)*cz + 1.0/12.0*(2.0*ax + cx + 2.0*bx + dx - ay - cy - 2.0*by - 2.0*dy)*bz + 1.0/12.0*(ax + 2.0*cx + bx + 2.0*dx + ay + cy + 2.0*by + 2.0*dy)*dz;
       RealTensor RT;
+      // You have to change sign if your points a, b, c, d are not in the expected ordering.
       Scalar coef = Hmeasure( 1 ) * ( zdir ? -1.0 : 1.0 );
       for ( Dimension i = 0; i < 3; ++i ) {
 	for ( Dimension j = 0; j < 3; ++j ) {
