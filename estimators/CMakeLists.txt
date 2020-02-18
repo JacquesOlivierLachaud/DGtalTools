@@ -12,6 +12,7 @@ SET(DGTAL_TOOLS_SRC
   3dCorrectedNormalCurrent
   3dFastCorrectedNormalCurrent
   3d-fcnc
+  3d-mesh-cnc
   measure-normals
 )
 
