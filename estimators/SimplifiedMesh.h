@@ -46,7 +46,7 @@
 // always include EigenSupport.h before any other Eigen headers
 // #include "DGtal/math/linalg/EigenSupport.h"
 #include "DGtal/base/Common.h"
-#include "DGtal/base/Clone.h"
+#include "DGtal/helpers/StdDefs.h"
 
 namespace DGtal
 {
@@ -57,9 +57,9 @@ namespace DGtal
      Represents a mesh as faces and a list of vertices. Vertices may
      be shared among faces but no correct topology is required.
 
-     @tparam TSpace an arbitrary model of CSpace.
+     @tparam TRealPoint an arbitrary model of RealPoint.
+     @tparam TRealVector an arbitrary model of RealVector.
    */
-  
   template < typename TRealPoint, typename TRealVector >
   struct SimplifiedMesh
   {
@@ -100,12 +100,64 @@ namespace DGtal
     template <typename RealPointIterator, typename FaceIterator>
     SimplifiedMesh( RealPointIterator itPos, RealPointIterator itPosEnd,
                     FaceIterator itFace, FaceIterator itFaceEnd );
-    
+
+    /// Initializes a mesh from vertex positions and polygonal faces
+    /// (clears everything before).
+    template <typename RealPointIterator, typename FaceIterator>
+    bool init( RealPointIterator itPos, RealPointIterator itPosEnd,
+	       FaceIterator itFace, FaceIterator itFaceEnd );
+
     /// Clears everything. The object is empty.
     void clear();
 
+    /// Given a range of real vectors, sets the normals of every
+    /// vertex to the given vectors.
+    template <typename RealVectorIterator>
+    bool setVertexNormals( RealVectorIterator itN, RealVectorIterator itNEnd );
+
+    /// Given a range of real vectors, sets the normals of every
+    /// face to the given vectors.
+    template <typename RealVectorIterator>
+    bool setFaceNormals( RealVectorIterator itN, RealVectorIterator itNEnd );
+
+    /// Uses the positions of vertices to compute a normal vector to
+    /// each face of the mesh. It computes the barycenter,
+    /// triangulates implicitly the face to build the normal vector.
+    void computeFaceNormalsFromPositions();
+
+    void computeFaceNormalsFromVertexNormals();
+
+    void computeVertexNormalsFromFaceNormals();
+    
     /// @}
 
+    /// @name Accessors
+    /// @{
+
+    /// @return a const reference to the vector of normals to vertices.
+    const std::vector< RealVector >& vertexNormals() const
+    { return myVertexNormals; }
+
+    /// @return a const reference to the vector of normals to faces.
+    const std::vector< RealVector >& faceNormals() const
+    { return myFaceNormals; }
+
+    /// @}
+
+    // ----------------------- Interface --------------------------------------
+  public:
+
+    /**
+     * Writes/Displays the object on an output stream.
+     * @param out the output stream where the object is written.
+     */
+    void selfDisplay ( std::ostream & out ) const;
+
+    /**
+     * Checks the validity/consistency of the object.
+     * @return 'true' if the object is valid, 'false' otherwise.
+     */
+    bool isValid() const;
     
     // ------------------------- Protected Datas ------------------------------
   protected:
@@ -126,7 +178,63 @@ namespace DGtal
     
     
   }; // end of class SimplifiedMesh
-  
+
+  /**
+   * Overloads 'operator<<' for displaying objects of class 'SimplifiedMesh'.
+   * @param out the output stream where the object is written.
+   * @param object the object of class 'SimplifiedMesh' to write.
+   * @return the output stream after the writing.
+   */
+  template < typename TRealPoint, typename TRealVector >
+  std::ostream&
+  operator<< ( std::ostream & out,
+	       const SimplifiedMesh<TRealPoint, TRealVector> & object );
+
+  /////////////////////////////////////////////////////////////////////////////
+  // template class SimplifiedMeshReader
+  /**
+     Description of template class 'SimplifiedMeshReader' <p> \brief Aim:
+     An helper class for reading mesh file formats and creating a SimplifiedMesh.
+
+     @tparam TRealPoint an arbitrary model of RealPoint.
+     @tparam TRealVector an arbitrary model of RealVector.
+   */
+  template < typename TRealPoint, typename TRealVector >
+  struct SimplifiedMeshReader
+  {
+    typedef TRealPoint                              RealPoint;
+    typedef TRealVector                             RealVector;
+    typedef SimplifiedMeshReader< RealPoint, RealVector > Self;
+    static const Dimension dimension = RealPoint::dimension;
+    BOOST_STATIC_ASSERT( ( dimension == 3 ) );
+
+    typedef DGtal::SimplifiedMesh< RealPoint, RealVector > SimplifiedMesh;
+    typedef typename SimplifiedMesh::Size           Size;
+    typedef typename SimplifiedMesh::Index          Index;
+    typedef typename SimplifiedMesh::FaceVertices   FaceVertices;
+    typedef typename SimplifiedMesh::VertexFaces    VertexFaces;
+
+    /// Checks that every index in \a indices are different from the others.
+    /// @param indices a vector of integer indices
+    /// @return 'true' iff the integer indices are all pairwise different.
+    static bool verifyIndices( const std::vector< Index > indices );
+
+    /// Splits a string \a str into several strings according to a
+    /// delimiter \a delim.
+    /// @param[in] str any string.
+    /// @param[in] delim any delimiter character.
+    /// @return the vector of split strings.
+    static
+    std::vector< std::string > split( const std::string& str, char delim = ' ');
+
+    /// Reads an input file as an OBJ file format and outputs the
+    /// corresponding simplified mesh.
+    /// @param[inout] the input stream where the OBJ file is read.
+    /// @param[out] the output simplified mesh.
+    /// @return 'true' if both reading the input stream was ok and the created mesh is ok.
+    static
+    bool readOBJ( std::istream & input, SimplifiedMesh & smesh );
+  };
 } // namespace DGtal
 
 ///////////////////////////////////////////////////////////////////////////////

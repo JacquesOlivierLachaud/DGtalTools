@@ -41,6 +41,7 @@
 //#include "DGtal/helpers/ShortcutsGeometry.h"
 #include "DGtal/shapes/PolygonalSurface.h"
 #include "EstimatorHelpers.h"
+#include "SimplifiedMesh.h"
 //#include "FastCorrectedNormalCurrent.h"
 
 
@@ -69,6 +70,7 @@ using namespace std;
  */
 
 ///////////////////////////////////////////////////////////////////////////////
+
 namespace DGtal {
   template < typename TPoint = Z3i::RealPoint,
 	     typename TVector =  Z3i::RealVector >
@@ -225,6 +227,8 @@ int main( int argc, char** argv )
   typedef PolygonalSurface<RealPoint>           PolySurf;
   typedef PolygonalSurfaceReader<RealPoint,RealVector> PolySurfReader;
   typedef PolySurfReader::NormalMap             NormalMap;
+  typedef SimplifiedMesh<RealPoint,RealVector>  SimpleMesh;
+  typedef SimplifiedMeshReader<RealPoint,RealVector> SimpleMeshReader;
   
   // typedef Shortcuts<KSpace>                     SH;
   // typedef ShortcutsGeometry<KSpace>             SHG;
@@ -295,24 +299,48 @@ int main( int argc, char** argv )
       return 0;
     }
 
-  PolySurf  psurf;
-  NormalMap vtx_normal_map;
-  NormalMap face_normal_map;
+  // PolySurf  psurf;
+  // NormalMap vtx_normal_map;
+  // NormalMap face_normal_map;
+  // auto mesh_file = vm[ "input"   ].as<std::string>();
+  // trace.info() << "Reading file <" << mesh_file << ">" << std::endl;
+  // ifstream mesh_input( mesh_file.c_str() );
+  // bool ok = PolySurfReader::read( mesh_input, psurf, vtx_normal_map, face_normal_map );
+  // if ( ! ok ) {
+  //   trace.error() << "Error reading file <" << mesh_file << ">" << std::endl;
+  //   return 1;
+  // }
+  // trace.info() << "PolygonalSurface: #V=" << psurf.nbVertices()
+  // 	       << " #E=" << psurf.nbEdges()
+  // 	       << " #F=" << psurf.nbFaces()
+  // 	       << " #NV=" << vtx_normal_map.size()
+  // 	       << " #NF=" << face_normal_map.size()
+  // 	       << std::endl;
+  trace.beginBlock( "Reading input mesh file" );
+  SimpleMesh smesh;
   auto mesh_file = vm[ "input"   ].as<std::string>();
   trace.info() << "Reading file <" << mesh_file << ">" << std::endl;
   ifstream mesh_input( mesh_file.c_str() );
-  bool ok = PolySurfReader::read( mesh_input, psurf, vtx_normal_map, face_normal_map );
+  bool ok = SimpleMeshReader::readOBJ( mesh_input, smesh );
   if ( ! ok ) {
     trace.error() << "Error reading file <" << mesh_file << ">" << std::endl;
     return 1;
   }
-  trace.info() << "PolygonalSurface: #V=" << psurf.nbVertices()
-	       << " #E=" << psurf.nbEdges()
-	       << " #F=" << psurf.nbFaces()
-	       << " #NV=" << vtx_normal_map.size()
-	       << " #NF=" << face_normal_map.size()
-	       << std::endl;
-
+  trace.info() << smesh << std::endl;
+  trace.endBlock();
+  trace.beginBlock( "Compute normals if necessary" );
+  if ( smesh.faceNormals().empty() && smesh.vertexNormals().empty() )
+    {
+      smesh.computeFaceNormalsFromPositions();
+      smesh.computeVertexNormalsFromFaceNormals();
+    }
+  else if ( smesh.faceNormals().empty() )
+    smesh.computeFaceNormalsFromVertexNormals();
+  else if ( smesh.vertexNormals().empty() )
+    smesh.computeVertexNormalsFromFaceNormals();
+  trace.info() << smesh << std::endl;
+  trace.endBlock();
+  
   // auto quantity   = vm[ "quantity"   ].as<std::string>();
   // auto anisotropy = vm[ "anisotropy" ].as<std::string>();
   // std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "MuXY", "HII", "GII" };

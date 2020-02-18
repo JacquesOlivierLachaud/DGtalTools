@@ -40,6 +40,50 @@
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
+template <typename RealPointIterator, typename FaceIterator>
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+SimplifiedMesh( RealPointIterator itPos, RealPointIterator itPosEnd,
+                    FaceIterator itFace, FaceIterator itFaceEnd )
+{
+  bool ok = init( itPos, itPosEnd, itFace, itFaceEnd );
+  if ( !ok ) clear();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+template <typename RealPointIterator, typename FaceIterator>
+bool
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+init( RealPointIterator itPos, RealPointIterator itPosEnd,
+      FaceIterator itFace, FaceIterator itFaceEnd )
+{
+  clear();
+  myPositions = std::vector< RealPoint >( itPos, itPosEnd );
+  myVertices.resize( myPositions.size() );
+  Index f = 0; // current face index
+  bool ok = true;
+  for ( ; ok && itFace != itFaceEnd; ++itFace, ++f )
+    {
+      FaceVertices f_vtcs;
+      for ( auto it = itFace->begin(), itE = itFace->end(); it != itE; ++it )
+	{
+	  Index vtx = *it;
+	  if ( vtx >= myVertices.size() )
+	    trace.warning() << "[SimplifiedMesh::init] Invalid vtx "
+			    << vtx << " at face " << f << std::endl;
+	  else
+	    {
+	      myVertices[ vtx ].push_back( f );
+	      f_vtcs.push_back( vtx );
+	    }
+	}
+      myFaces.push_back( f_vtcs );
+    }
+  return ok;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
 void
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 clear()
@@ -50,3 +94,257 @@ clear()
   myVertexNormals.clear();
   myFaceNormals.clear();
 }
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+template <typename RealVectorIterator>
+bool
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+setVertexNormals( RealVectorIterator itN, RealVectorIterator itNEnd )
+{
+  myVertexNormals = std::vector< RealVector >( itN, itNEnd );
+  return myVertexNormals.size() == myPositions.size();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+template <typename RealVectorIterator>
+bool
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+setFaceNormals( RealVectorIterator itN, RealVectorIterator itNEnd )
+{
+  myFaceNormals = std::vector< RealVector >( itN, itNEnd );
+  return myFaceNormals.size() == myFaces.size();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeFaceNormalsFromPositions()
+{
+  myFaceNormals.resize( myFaces.size() );
+  Index f = 0;
+  for ( auto face : myFaces )
+    {
+      RealPoint  p; // barycenter
+      RealVector n; // normal
+      // compute barycenter
+      for ( auto idx : face ) p += myPositions[ idx ];
+      p /= face.size();
+      // compute normal as sum of triangle normal vectors.
+      for ( Index i = 0; i < face.size(); ++i )
+	{
+	  const Index  j = face[ i ];
+	  const Index nj = face[ (i+1) % face.size() ];
+	  n += ( myPositions[ j ] - p ).crossProduct( myPositions[ nj ] - p );
+	}
+      myFaceNormals[ f++ ] = n.getNormalized();
+    }
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeFaceNormalsFromVertexNormals()
+{
+  if ( myVertexNormals.empty() ) return;
+  myFaceNormals.resize( myFaces.size() );
+  Index f = 0;
+  for ( auto face : myFaces )
+    {
+      RealVector n; // normal
+      for ( auto idx : face ) n += myVertexNormals[ idx ];
+      myFaceNormals[ f++ ] = n.getNormalized();
+    }
+}
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeVertexNormalsFromFaceNormals()
+{
+  if ( myFaceNormals.empty() ) return;
+  myVertexNormals.resize( myVertices.size() );
+  Index v = 0;
+  for ( auto vertex : myVertices )
+    {
+      RealVector n; // normal
+      for ( auto idx : vertex ) n += myFaceNormals[ idx ];
+      myVertexNormals[ v++ ] = n.getNormalized();
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Interface - public :
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+selfDisplay ( std::ostream & out ) const
+{
+  out << "[SimplifiedMesh" << ( isValid() ? " (OK)" : " (KO)" )
+      << " #V=" << myPositions.size()
+      << " #VN=" << myVertexNormals.size()
+      << " #F=" << myFaces.size()
+      << " #FN=" << myFaceNormals.size()
+      << "]";
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+bool
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+isValid() const
+{
+  return myPositions.size() == myVertices.size()
+    && ( myVertexNormals.size() == 0
+	 || ( myVertexNormals.size() == myPositions.size() ) )
+    && ( myFaceNormals.size() == 0
+	 || ( myFaceNormals.size() == myFaces.size() ) );
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Implementation of inline functions                                        //
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+std::ostream&
+DGtal::operator<< ( std::ostream & out, 
+                    const SimplifiedMesh<TRealPoint, TRealVector> & object )
+{
+  object.selfDisplay( out );
+  return out;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// IMPLEMENTATION of inline methods.
+///////////////////////////////////////////////////////////////////////////////
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+bool
+DGtal::SimplifiedMeshReader<TRealPoint, TRealVector>::
+verifyIndices( const std::vector< Index > indices )
+{
+  std::set<Index> sindices( indices.begin(), indices.end() );
+  return sindices.size() == indices.size();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+std::vector< std::string > 
+DGtal::SimplifiedMeshReader<TRealPoint, TRealVector>::
+split( const std::string& str, char delim )
+{
+  std::stringstream ss(str);
+  std::string token;
+  std::vector< std::string > cont;
+  while ( std::getline( ss, token, delim ) ) cont.push_back(token);
+  return cont;
+}    
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+bool
+DGtal::SimplifiedMeshReader<TRealPoint, TRealVector>::
+readOBJ( std::istream & input, SimplifiedMesh & smesh )
+{
+  std::vector<RealPoint>  vertices;
+  std::vector<RealVector> normals;
+  std::vector< std::vector< Index > > faces;
+  std::vector< std::vector< Index > > faces_normals_idx;
+  std::string linestr;
+  std::string keyword;
+  std::string indices;
+  RealPoint  p;
+  RealVector n;
+  std::getline( input, linestr );
+  Index l = 0;
+  for ( ; input.good() && ! input.eof(); std::getline( input, linestr ), l++ )
+    {
+      if ( linestr.empty() ) continue; // skip empty line
+      if ( linestr[0] == '#' ) continue; // skip comment line
+      std::istringstream lineinput( linestr );
+      lineinput >> keyword;
+      if ( keyword == "v" ) {
+	lineinput >> p[ 0 ] >> p[ 1 ] >> p[ 2 ];
+	// std::cout << "[" << l << "] v " << p << std::endl;
+	vertices.push_back( p );
+      } else if ( keyword == "vn" ) {
+	lineinput >> n[ 0 ] >> n[ 1 ] >> n[ 2 ];
+	normals.push_back( n );
+      } else if ( keyword == "f" ) {
+	std::vector< Index > face, face_normals;
+	lineinput >> indices;
+	while ( ! lineinput.eof() ) {
+	  if ( indices.empty() ) break;
+	  auto vtxinfo = split( indices, '/' );
+	  if ( vtxinfo.size() == 0 ) break;
+	  Index v  = std::stoi( vtxinfo[ 0 ] );
+	  Index vn = vtxinfo.size() >= 3 ? std::stoi( vtxinfo[ 2 ] ) : v;
+	  face.push_back( v - 1 );
+	  face_normals.push_back( vn - 1 );
+	  lineinput >> indices;
+	}
+	if ( ! face.empty() && verifyIndices( face ) )
+	  {
+	    faces.push_back( face );
+	    faces_normals_idx.push_back( face_normals );
+	  }
+      }
+      // Weird: necessary to clear them.
+      keyword = ""; linestr = "";
+    } // while ( ! input.eof() )
+  // Creating SimplifiedMesh
+  trace.info() << "[SimplifiedMeshReader::readOBJ] Read"
+	       << " #lines=" << l
+	       << " #V=" << vertices.size()
+	       << " #VN=" << normals.size()
+	       << " #F=" << faces.size() << std::endl;
+  if ( input.bad() )
+    trace.warning() << "[SimplifiedMeshReader::readOBJ] Some I/O error occured."
+		    << " Proceeding but the mesh may be damaged." << std::endl;
+  bool ok = smesh.init( vertices.begin(), vertices.end(),
+			faces.begin(), faces.end() );
+  if ( ! ok )
+	trace.warning() << "[SimplifiedMeshReader::readOBJ]"
+			<< " Error initializing mesh." << std::endl;
+  if ( ( ! normals.empty() ) && ( normals.size() == vertices.size() ) )
+    { // Build vertex normal map
+      bool ok_vtx_normals = smesh.setVertexNormals( normals.begin(), normals.end() );
+      if ( ! ok_vtx_normals )
+	trace.warning() << "[SimplifiedMeshReader::readOBJ]"
+			<< " Error setting vertex normals." << std::endl;
+      ok = ok && ok_vtx_normals;
+    }
+  if ( ! normals.empty() )
+    { // Build face normal map
+      std::vector< RealVector > faces_normals;
+      Index i = 0;
+      for ( auto face_n_indices : faces_normals_idx )
+	{ 
+	  RealVector n;
+	  for ( auto k : face_n_indices ) n += normals[ k ];
+	  n /= face_n_indices.size();
+	  faces_normals.push_back( n );
+	}
+      bool ok_face_normals = smesh.setFaceNormals( faces_normals.begin(),
+						   faces_normals.end() );
+      if ( ! ok_face_normals )
+	trace.warning() << "[SimplifiedMeshReader::readOBJ]"
+			<< " Error setting face normals." << std::endl;
+      ok = ok && ok_face_normals;
+    }
+  return ( ! input.bad() ) && ok;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
