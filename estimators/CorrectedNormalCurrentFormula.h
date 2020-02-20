@@ -141,7 +141,7 @@ namespace DGtal
       //    =  1/2 < ( (u_A + u_B + u_C)/3.0 ) | (AB x AC ) >
       RealVector uM = ( ua+ub+uc ) / 3.0;
       if ( uM ) uM /= uM.norm();
-      return O.5 * ( b - a ).crossProduct( c - a ).dotProduct( uM );
+      return 0.5 * ( b - a ).crossProduct( c - a ).dotProduct( uM );
     }
     
     /// Computes mu0 measure (area) of polygonal face \a pts given a
@@ -231,7 +231,7 @@ namespace DGtal
       // MU1=1/2( | uM u_C-u_B A | + | uM u_A-u_C B | + | uM u_B-u_A C |
       RealVector uM = ( ua+ub+uc ) / 3.0;
       if ( uM ) uM /= uM.norm();
-      return O.5 * ( uM.crossProduct( uc - ub ).dotProduct( a )
+      return 0.5 * ( uM.crossProduct( uc - ub ).dotProduct( a )
 		     + uM.crossProduct( ua - uc ).dotProduct( b )
 		     + uM.crossProduct( ub - ua ).dotProduct( c ) );
     }
@@ -323,7 +323,7 @@ namespace DGtal
 	  return ST.algebraicArea();
 	}
       else
-	return O.5 * ( ua.crossProduct( ub ).dotProduct( uc ) );
+	return 0.5 * ( ua.crossProduct( ub ).dotProduct( uc ) );
     }
     
     /// Computes mu2 measure (Gaussian curvature) of polygonal face \a pts given a
@@ -460,7 +460,7 @@ namespace DGtal
       for ( Index i = 0; i < pts.size(); i++ )
 	T += muXYInterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
 				ub,   u[ i ],   u[ (i+1)%pts.size() ], unit_u );
-      return a;
+      return T;
     }
     
     /// @}
