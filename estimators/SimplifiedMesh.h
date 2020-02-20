@@ -47,6 +47,7 @@
 // #include "DGtal/math/linalg/EigenSupport.h"
 #include "DGtal/base/Common.h"
 #include "DGtal/helpers/StdDefs.h"
+#include "DGtal/io/Color.h"
 
 namespace DGtal
 {
@@ -140,6 +141,14 @@ namespace DGtal
     /// @name Accessors
     /// @{
 
+    /// @return the number of faces of the mesh.
+    Size nbFaces() const
+    { return myFaces.size(); }
+
+    /// @return the number of vertices of the mesh.
+    Size nbVertices() const
+    { return myVertices.size(); }
+    
     /// @return a const reference to the vector giving for each face
     /// its incident vertices.
     const std::vector< FaceVertices >& incidentVertices() const
@@ -281,6 +290,7 @@ namespace DGtal
     typedef typename SimplifiedMesh::Index          Index;
     typedef typename SimplifiedMesh::FaceVertices   FaceVertices;
     typedef typename SimplifiedMesh::VertexFaces    VertexFaces;
+    typedef std::vector< Color >                    Colors;
 
     /// Writes a simplified mesh in an output file (in OBJ file format).
     /// @param[inout] the output stream where the OBJ file is written.
@@ -288,6 +298,14 @@ namespace DGtal
     /// @return 'true' if writing in the output stream was ok.
     static
     bool writeOBJ( std::ostream & output, const SimplifiedMesh & smesh );
+
+    static
+    bool writeOBJ( std::string            objfile,
+                   const SimplifiedMesh & smesh, 
+                   const Colors&          diffuse_colors = Colors(),
+                   const Color&           ambient_color  = Color( 32, 32, 32 ),
+                   const Color&           diffuse_color  = Color( 200, 200, 255 ),
+                   const Color&           specular_color = Color::White );
     
   };
 

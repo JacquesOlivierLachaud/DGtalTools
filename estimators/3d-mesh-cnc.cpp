@@ -36,13 +36,12 @@
 #include "DGtal/base/Common.h"
 #include "DGtal/helpers/StdDefs.h"
 
-//#include "EstimatorHelpers.h"
-//#include "DGtal/helpers/Shortcuts.h"
+#include "DGtal/helpers/Shortcuts.h"
 //#include "DGtal/helpers/ShortcutsGeometry.h"
 #include "DGtal/shapes/PolygonalSurface.h"
 #include "EstimatorHelpers.h"
 #include "SimplifiedMesh.h"
-#include "CorrectedNormalCurrentFormula.h"
+#include "CorrectedNormalCurrentComputer.h"
 //#include "FastCorrectedNormalCurrent.h"
 
 
@@ -232,7 +231,7 @@ int main( int argc, char** argv )
   typedef SimplifiedMeshReader<RealPoint,RealVector> SimpleMeshReader;
   typedef SimplifiedMeshWriter<RealPoint,RealVector> SimpleMeshWriter;
   
-  // typedef Shortcuts<KSpace>                     SH;
+  typedef Shortcuts<KSpace>                     SH;
   // typedef ShortcutsGeometry<KSpace>             SHG;
   typedef EstimatorHelpers<KSpace>              EH;
   // typedef SH::IdxDigitalSurface                 Surface;
@@ -262,9 +261,9 @@ int main( int argc, char** argv )
   //   ( "anisotropy", po::value<std::string>()->default_value( "NAdd" ), "tells how is symmetrized the anisotropic measure mu_XY, in Mult|Add|NMult|NAdd: Mult forces symmetry by M*M^t, Add forces symmetry by 0.5*(M+M^t)+NxN, NMult and NAdd normalized by the area.")
   //   ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." )
   //   ( "interpolate,I", "when specified, it interpolate the given corrected normal vector field and uses the corresponding measures." );
-  // EH::optionsDisplayValues   ( general_opt );
-  // general_opt.add_options()
-  //   ( "zero-tic", po::value<double>()->default_value( 0.0 ), "adds a black band around zero of given thickness in colormaps." );
+  EH::optionsDisplayValues   ( general_opt );
+  general_opt.add_options()
+    ( "zero-tic", po::value<double>()->default_value( 0.0 ), "adds a black band around zero of given thickness in colormaps." );
 
   // //#endif
   // general_opt.add_options()
@@ -331,6 +330,7 @@ int main( int argc, char** argv )
   }
   trace.info() << smesh << std::endl;
   trace.endBlock();
+
   trace.beginBlock( "Compute normals if necessary" );
   if ( smesh.faceNormals().empty() && smesh.vertexNormals().empty() )
     {
@@ -343,16 +343,47 @@ int main( int argc, char** argv )
     smesh.computeVertexNormalsFromFaceNormals();
   trace.info() << smesh << std::endl;
   trace.endBlock();
-      
+
+  trace.beginBlock( "Compute measures" );
+  typedef CorrectedNormalCurrentComputer< RealPoint, RealVector > CNCComputer;
+  CNCComputer cnc( smesh );
+  cnc.computeInterpolatedMeasures( CNCComputer::Measure::ALL_MU );
+  double G = 0.0;
+  for ( auto g : cnc.mu2 ) G += g;
+  trace.info() << "Total Gauss curvature G=" << G << std::endl;
+  trace.endBlock();
+
+  const auto minValue         = vm[ "minValue" ].as<double>();
+  const auto maxValue         = vm[ "maxValue" ].as<double>();
+  const auto colormap_name    = vm[ "colormap" ].as<std::string>();
+  const auto zt               = vm[ "zero-tic" ].as<double>();
+  auto params         = SH::defaultParameters();
+  const auto colormap = SH::getZeroTickedColorMap( minValue, maxValue,
+                                                   params( "colormap", colormap_name )
+                                                   ( "zero-tic", zt ) );
+  
   trace.beginBlock( "Output mesh OBJ file" );
   auto output_basefile = vm[ "output"   ].as<std::string>();
-  auto output_objfile  = output_basefile + ".obj";
+  auto output_objfile  = output_basefile + "-primal.obj";
   ofstream mesh_output( output_objfile.c_str() );
   bool okw = SimpleMeshWriter::writeOBJ( mesh_output, smesh );
+  mesh_output.close();
   if ( ! okw ) {
     trace.error() << "Error writing file <" << output_objfile << ">" << std::endl;
     return 2;
   }
+  auto colors = SH::Colors( smesh.nbFaces() );
+  double min_h = cnc.mu1[ 0 ] / cnc.mu0[ 0 ];
+  double max_h = cnc.mu1[ 0 ] / cnc.mu0[ 0 ];
+  for ( SH::Idx i = 0; i < colors.size(); i++ )
+    {
+      double h =  cnc.mu1[ i ] / cnc.mu0[ i ];
+      min_h    = std::min( h, min_h );
+      max_h    = std::max( h, max_h );
+      trace.info() << " " << h;
+      colors[ i ] = colormap( h );
+    }
+  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colors );
   trace.endBlock();
 
       

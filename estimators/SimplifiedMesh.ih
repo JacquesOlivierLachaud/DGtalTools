@@ -29,6 +29,7 @@
 
 //////////////////////////////////////////////////////////////////////////////
 #include <cstdlib>
+#include "DGtal/shapes/MeshHelpers.h"
 //////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -273,7 +274,7 @@ readOBJ( std::istream & input, SimplifiedMesh & smesh )
       if ( linestr.empty() ) continue; // skip empty line
       if ( linestr[0] == '#' ) continue; // skip comment line
       std::istringstream lineinput( linestr );
-      lineinput >> keyword;
+      std::operator>>( lineinput, keyword ); // lineinput >> keyword;
       if ( keyword == "v" ) {
 	lineinput >> p[ 0 ] >> p[ 1 ] >> p[ 2 ];
 	// std::cout << "[" << l << "] v " << p << std::endl;
@@ -284,7 +285,7 @@ readOBJ( std::istream & input, SimplifiedMesh & smesh )
       } else if ( keyword == "f" ) {
 	std::vector< Index > face, face_normals;
 	while ( ! lineinput.eof() ) {
-          lineinput >> indices;
+          std::operator>>( lineinput, indices ); // lineinput >> indices;
 	  if ( indices.empty() ) break;
 	  auto vtxinfo = split( indices, '/' );
 	  if ( vtxinfo.size() == 0 ) break;
@@ -372,6 +373,92 @@ writeOBJ( std::ostream & output, const SimplifiedMesh & smesh )
     }
   output << "# " << smesh.incidentVertices().size() << " faces" << std::endl;
   return output.good();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+bool
+DGtal::SimplifiedMeshWriter<TRealPoint, TRealVector>::
+writeOBJ( std::string            objfile,
+          const SimplifiedMesh & smesh, 
+          const Colors&          diffuse_colors,
+          const Color&           ambient_color,
+          const Color&           diffuse_color,
+          const Color&           specular_color )
+{
+  std::string mtlfile;
+  auto lastindex = objfile.find_last_of(".");
+  if ( lastindex == std::string::npos )
+    {
+      mtlfile  = objfile + ".mtl";
+      objfile  = objfile + ".obj";
+    }
+  else
+    {
+      mtlfile  = objfile.substr(0, lastindex) + ".mtl"; 
+    }
+  std::ofstream output_obj( objfile.c_str() );
+  output_obj << "#  OBJ format" << std::endl;
+  output_obj << "# DGtal::SimplifiedMeshWriter::writeOBJ" << std::endl;
+  output_obj << "o anObject" << std::endl;
+  // remove directory to write material
+  auto indexpath = objfile.find_last_of("/");
+  output_obj << "mtllib " << mtlfile.substr(indexpath+1) << std::endl;
+  std::ofstream output_mtl( mtlfile.c_str() );
+  output_mtl << "#  MTL format"<< std::endl;
+  output_mtl << "# generated from SimplifiedMeshWriter from the DGTal library"<< std::endl;
+  // Write positions
+  for ( auto v : smesh.positions() )
+    output_obj << "v " << v[ 0 ] << " " << v[ 1 ] << " " << v[ 2 ] << std::endl;
+  output_obj << "# " << smesh.positions().size() << " vertices" << std::endl;
+  // Write vertex normals
+  if ( ! smesh.vertexNormals().empty() )
+    {
+      for ( auto vn : smesh.vertexNormals() )
+        output_obj << "vn " << vn[ 0 ] << " " << vn[ 1 ] << " " << vn[ 2 ] << std::endl;
+      output_obj << "# " << smesh.vertexNormals().size() << " normal vectors" << std::endl;
+    }
+  // Taking care of materials
+  bool  has_material = ( smesh.nbFaces() == diffuse_colors.size() );
+  Index idxMaterial = 0;
+  std::map<Color, Index > mapMaterial;
+  if ( has_material )
+    {
+      for ( Index f = 0; f < diffuse_colors.size(); ++f )
+        {
+          Color c = diffuse_colors[ f ];
+          if ( mapMaterial.count( c ) == 0 )
+            {
+              MeshHelpers::exportMTLNewMaterial
+                ( output_mtl, idxMaterial, ambient_color, c, specular_color );
+              mapMaterial[ c ] = idxMaterial++;
+            }
+        }
+    }
+  else
+    {
+      MeshHelpers::exportMTLNewMaterial
+        ( output_mtl, idxMaterial, ambient_color, diffuse_color, specular_color );
+    }
+  // Write faces with material(s)
+  Index idx_f = 0;
+  for ( auto f : smesh.incidentVertices() )
+    {
+      output_obj << "usemtl material_"
+                 << ( has_material ? mapMaterial[ diffuse_colors[ idx_f ] ] : idxMaterial )
+                 << std::endl; 
+      output_obj << "f";
+      for ( auto v : f )
+        if ( smesh.vertexNormals().empty() )
+          output_obj << " " << (v+1);
+        else
+          output_obj << " " << (v+1) << "//" << (v+1);
+      output_obj << std::endl;
+      idx_f++;
+    }
+  output_obj << "# " << smesh.incidentVertices().size() << " faces" << std::endl;
+  output_mtl.close();
+  return output_obj.good();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

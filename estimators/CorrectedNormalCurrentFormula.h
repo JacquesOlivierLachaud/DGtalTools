@@ -89,7 +89,7 @@ namespace DGtal
      MUXY = 1/2 < uM | < Y | uc-ua > X x (b-a) - < Y | ub-ua > X x (c-a) >
   */
   template < typename TRealPoint, typename TRealVector >
-  class CorrectedNormalCurrentFormula
+  struct CorrectedNormalCurrentFormula
   {
     typedef TRealPoint                     RealPoint;
     typedef TRealVector                    RealVector;
@@ -140,8 +140,8 @@ namespace DGtal
       // MU0=1/2*det( uM, B-A, C-A )
       //    =  1/2 < ( (u_A + u_B + u_C)/3.0 ) | (AB x AC ) >
       RealVector uM = ( ua+ub+uc ) / 3.0;
-      if ( uM ) uM /= uM.norm();
-      return 0.5 * ( b - a ).crossProduct( c - a ).dotProduct( uM );
+      if ( unit_u ) uM /= uM.norm();
+      return 0.5 * ( b - a ).crossProduct( c - a ).dot( uM );
     }
     
     /// Computes mu0 measure (area) of polygonal face \a pts given a
@@ -180,7 +180,7 @@ namespace DGtal
 	return mu0InterpolatedU( pts[ 0 ], pts[ 1 ], pts[ 2 ],
 				 u[ 0 ], u[ 1 ], u[ 2 ], unit_u );
       const RealPoint   b = barycenter( pts );
-      const RealVector ub = barycenter( pts );
+      const RealVector ub = averageUnitVector( u );
       Scalar          a = 0.0;
       for ( Index i = 0; i < pts.size(); i++ )
 	a += mu0InterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
@@ -230,10 +230,10 @@ namespace DGtal
     {
       // MU1=1/2( | uM u_C-u_B A | + | uM u_A-u_C B | + | uM u_B-u_A C |
       RealVector uM = ( ua+ub+uc ) / 3.0;
-      if ( uM ) uM /= uM.norm();
-      return 0.5 * ( uM.crossProduct( uc - ub ).dotProduct( a )
-		     + uM.crossProduct( ua - uc ).dotProduct( b )
-		     + uM.crossProduct( ub - ua ).dotProduct( c ) );
+      if ( unit_u ) uM /= uM.norm();
+      return 0.5 * ( uM.crossProduct( uc - ub ).dot( a )
+		     + uM.crossProduct( ua - uc ).dot( b )
+		     + uM.crossProduct( ub - ua ).dot( c ) );
     }
     
     /// Computes mu1 measure (mean curvature) of polygonal face \a pts given a
@@ -265,7 +265,7 @@ namespace DGtal
 	return mu1InterpolatedU( pts[ 0 ], pts[ 1 ], pts[ 2 ],
 				 u[ 0 ], u[ 1 ], u[ 2 ], unit_u );
       const RealPoint   b = barycenter( pts );
-      const RealVector ub = barycenter( pts );
+      const RealVector ub = averageUnitVector( u );
       Scalar          a = 0.0;
       for ( Index i = 0; i < pts.size(); i++ )
 	a += mu1InterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
@@ -323,7 +323,7 @@ namespace DGtal
 	  return ST.algebraicArea();
 	}
       else
-	return 0.5 * ( ua.crossProduct( ub ).dotProduct( uc ) );
+	return 0.5 * ( ua.crossProduct( ub ).dot( uc ) );
     }
     
     /// Computes mu2 measure (Gaussian curvature) of polygonal face \a pts given a
@@ -355,7 +355,7 @@ namespace DGtal
 	return mu2InterpolatedU( pts[ 0 ], pts[ 1 ], pts[ 2 ],
 				 u[ 0 ], u[ 1 ], u[ 2 ], unit_u );
       const RealPoint   b = barycenter( pts );
-      const RealVector ub = barycenter( pts );
+      const RealVector ub = averageUnitVector( u );
       Scalar          a = 0.0;
       for ( Index i = 0; i < pts.size(); i++ )
 	a += mu2InterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
@@ -407,7 +407,7 @@ namespace DGtal
       //  MUXY = 1/2 < uM | < Y | uc-ua > X x (b-a) - < Y | ub-ua > X x (c-a) >
       //  MUXY = 1/2 ( < Y | ub-ua > | X uM (c-a) | - < Y | uc-ua > | X uM (b-a) | )
       RealVector uM = ( ua+ub+uc ) / 3.0;
-      if ( uM ) uM /= uM.norm();
+      if ( unit_u ) uM /= uM.norm();
       const RealVector uac = uc - ua;
       const RealVector uab = ub - ua;
       const RealVector  ab = b - a;
@@ -418,8 +418,8 @@ namespace DGtal
 	  // Since RealVector Y = RealVector::base( j, 1.0 );
 	  // < Y | uac > = uac[ j ]
 	  const Scalar tij =
-	    0.5 * uM.dot_product( uac[ j ] * X.crossProduct( ab )
-				  - uab[ j ] * X.crossProduct( ac ) );
+	    0.5 * uM.dot( uac[ j ] * X.crossProduct( ab )
+                          - uab[ j ] * X.crossProduct( ac ) );
 	  T.setComponent( i, j, tij );
 	}
       }
@@ -450,12 +450,12 @@ namespace DGtal
 				  bool unit_u = false )
     {
       ASSERT( pts.size() == u.size() );
-      if ( pts.size() <  3 ) return 0.0;
+      if ( pts.size() <  3 ) return RealTensor { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
       if ( pts.size() == 3 )
 	return muXYInterpolatedU( pts[ 0 ], pts[ 1 ], pts[ 2 ],
 				 u[ 0 ], u[ 1 ], u[ 2 ], unit_u );
       const RealPoint   b = barycenter( pts );
-      const RealVector ub = barycenter( pts );
+      const RealVector ub = averageUnitVector( u );
       RealTensor        T = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
       for ( Index i = 0; i < pts.size(); i++ )
 	T += muXYInterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
