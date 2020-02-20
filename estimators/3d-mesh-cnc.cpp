@@ -230,6 +230,7 @@ int main( int argc, char** argv )
   typedef PolySurfReader::NormalMap             NormalMap;
   typedef SimplifiedMesh<RealPoint,RealVector>  SimpleMesh;
   typedef SimplifiedMeshReader<RealPoint,RealVector> SimpleMeshReader;
+  typedef SimplifiedMeshWriter<RealPoint,RealVector> SimpleMeshWriter;
   
   // typedef Shortcuts<KSpace>                     SH;
   // typedef ShortcutsGeometry<KSpace>             SHG;
@@ -246,7 +247,8 @@ int main( int argc, char** argv )
   po::options_description general_opt( "Allowed options are" );
   general_opt.add_options()
     ( "help,h", "display this message" )
-    ( "input,i", po::value<std::string>(), "input mesh OBJ file" );
+    ( "input,i", po::value<std::string>(), "input mesh OBJ file" )
+    ( "output,o", po::value<std::string>()->default_value( "cnc" ), "output mesh base filename" );
   //   ( "m-coef", po::value<double>()->default_value( 3.0 ), "the coefficient k that defines the radius of the ball used in measures, that is r := k h^b" )
   //   ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" );
   
@@ -341,7 +343,19 @@ int main( int argc, char** argv )
     smesh.computeVertexNormalsFromFaceNormals();
   trace.info() << smesh << std::endl;
   trace.endBlock();
-  
+      
+  trace.beginBlock( "Output mesh OBJ file" );
+  auto output_basefile = vm[ "output"   ].as<std::string>();
+  auto output_objfile  = output_basefile + ".obj";
+  ofstream mesh_output( output_objfile.c_str() );
+  bool okw = SimpleMeshWriter::writeOBJ( mesh_output, smesh );
+  if ( ! okw ) {
+    trace.error() << "Error writing file <" << output_objfile << ">" << std::endl;
+    return 2;
+  }
+  trace.endBlock();
+
+      
   // auto quantity   = vm[ "quantity"   ].as<std::string>();
   // auto anisotropy = vm[ "anisotropy" ].as<std::string>();
   // std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "MuXY", "HII", "GII" };

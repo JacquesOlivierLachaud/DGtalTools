@@ -125,14 +125,34 @@ namespace DGtal
     /// triangulates implicitly the face to build the normal vector.
     void computeFaceNormalsFromPositions();
 
+    /// Uses the normals associated with vertices to compute a normal
+    /// vector to each face of the mesh. It simply averages the
+    /// normals at every incident vertex.
     void computeFaceNormalsFromVertexNormals();
 
+    /// Uses the normals associated with faces to compute a normal
+    /// vector to each vertex of the mesh. It simply averages the
+    /// normals of every incident face.
     void computeVertexNormalsFromFaceNormals();
     
     /// @}
 
     /// @name Accessors
     /// @{
+
+    /// @return a const reference to the vector giving for each face
+    /// its incident vertices.
+    const std::vector< FaceVertices >& incidentVertices() const
+    { return myFaces; }
+
+    /// @return a const reference to the vector giving for each vertex
+    /// its incident faces.
+    const std::vector< VertexFaces >& incidentFaces() const
+    { return myVertices; }
+
+    /// @return a const reference to the vector of positions (of vertices).
+    const std::vector< RealVector >& positions() const
+    { return myPositions; }
 
     /// @return a const reference to the vector of normals to vertices.
     const std::vector< RealVector >& vertexNormals() const
@@ -190,11 +210,12 @@ namespace DGtal
   operator<< ( std::ostream & out,
 	       const SimplifiedMesh<TRealPoint, TRealVector> & object );
 
+  
   /////////////////////////////////////////////////////////////////////////////
   // template class SimplifiedMeshReader
   /**
      Description of template class 'SimplifiedMeshReader' <p> \brief Aim:
-     An helper class for reading mesh file formats and creating a SimplifiedMesh.
+     An helper class for reading mesh files and creating a SimplifiedMesh.
 
      @tparam TRealPoint an arbitrary model of RealPoint.
      @tparam TRealVector an arbitrary model of RealVector.
@@ -235,6 +256,41 @@ namespace DGtal
     static
     bool readOBJ( std::istream & input, SimplifiedMesh & smesh );
   };
+
+
+  /////////////////////////////////////////////////////////////////////////////
+  // template class SimplifiedMeshWriter
+  /**
+     Description of template class 'SimplifiedMeshWriter' <p> \brief Aim:
+     An helper class for writing mesh file formats and creating a SimplifiedMesh.
+
+     @tparam TRealPoint an arbitrary model of RealPoint.
+     @tparam TRealVector an arbitrary model of RealVector.
+   */
+  template < typename TRealPoint, typename TRealVector >
+  struct SimplifiedMeshWriter
+  {
+    typedef TRealPoint                              RealPoint;
+    typedef TRealVector                             RealVector;
+    typedef SimplifiedMeshWriter< RealPoint, RealVector > Self;
+    static const Dimension dimension = RealPoint::dimension;
+    BOOST_STATIC_ASSERT( ( dimension == 3 ) );
+
+    typedef DGtal::SimplifiedMesh< RealPoint, RealVector > SimplifiedMesh;
+    typedef typename SimplifiedMesh::Size           Size;
+    typedef typename SimplifiedMesh::Index          Index;
+    typedef typename SimplifiedMesh::FaceVertices   FaceVertices;
+    typedef typename SimplifiedMesh::VertexFaces    VertexFaces;
+
+    /// Writes a simplified mesh in an output file (in OBJ file format).
+    /// @param[inout] the output stream where the OBJ file is written.
+    /// @param[in] the simplified mesh.
+    /// @return 'true' if writing in the output stream was ok.
+    static
+    bool writeOBJ( std::ostream & output, const SimplifiedMesh & smesh );
+    
+  };
+
 } // namespace DGtal
 
 ///////////////////////////////////////////////////////////////////////////////

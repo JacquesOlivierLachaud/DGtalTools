@@ -283,8 +283,8 @@ readOBJ( std::istream & input, SimplifiedMesh & smesh )
 	normals.push_back( n );
       } else if ( keyword == "f" ) {
 	std::vector< Index > face, face_normals;
-	lineinput >> indices;
 	while ( ! lineinput.eof() ) {
+          lineinput >> indices;
 	  if ( indices.empty() ) break;
 	  auto vtxinfo = split( indices, '/' );
 	  if ( vtxinfo.size() == 0 ) break;
@@ -292,7 +292,7 @@ readOBJ( std::istream & input, SimplifiedMesh & smesh )
 	  Index vn = vtxinfo.size() >= 3 ? std::stoi( vtxinfo[ 2 ] ) : v;
 	  face.push_back( v - 1 );
 	  face_normals.push_back( vn - 1 );
-	  lineinput >> indices;
+	  indices = "";
 	}
 	if ( ! face.empty() && verifyIndices( face ) )
 	  {
@@ -344,6 +344,34 @@ readOBJ( std::istream & input, SimplifiedMesh & smesh )
       ok = ok && ok_face_normals;
     }
   return ( ! input.bad() ) && ok;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+bool
+DGtal::SimplifiedMeshWriter<TRealPoint, TRealVector>::
+writeOBJ( std::ostream & output, const SimplifiedMesh & smesh )
+{
+  output << "# OBJ format" << std::endl;
+  output << "# DGtal::SimplifiedMeshWriter::writeOBJ" << std::endl;
+  output << "o anObject" << std::endl;
+  for ( auto v : smesh.positions() )
+    output << "v " << v[ 0 ] << " " << v[ 1 ] << " " << v[ 2 ] << std::endl;
+  output << "# " << smesh.positions().size() << " vertices" << std::endl;
+  if ( ! smesh.vertexNormals().empty() )
+    {
+      for ( auto vn : smesh.vertexNormals() )
+        output << "vn " << vn[ 0 ] << " " << vn[ 1 ] << " " << vn[ 2 ] << std::endl;
+      output << "# " << smesh.vertexNormals().size() << " normal vectors" << std::endl;
+    }
+  for ( auto f : smesh.incidentVertices() )
+    {
+      output << "f";
+      for ( auto v : f ) output << " " << (v+1);
+      output << std::endl;
+    }
+  output << "# " << smesh.incidentVertices().size() << " faces" << std::endl;
+  return output.good();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
