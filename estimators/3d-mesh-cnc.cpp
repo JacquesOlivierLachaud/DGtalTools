@@ -42,6 +42,7 @@
 #include "DGtal/shapes/PolygonalSurface.h"
 #include "EstimatorHelpers.h"
 #include "SimplifiedMesh.h"
+#include "CorrectedNormalCurrentFormula.h"
 //#include "FastCorrectedNormalCurrent.h"
 
 

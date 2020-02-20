@@ -79,12 +79,14 @@ namespace DGtal
      It follows that 
      MU1=1/2( | uM u_C-u_B A | + | uM u_A-u_C B | + | uM u_B-u_A C |
 
-     Last, Gaussian curvature measure is
+     Gaussian curvature measure is
      MU2=-1/2*uCx*uBy*uAz + 1/2*uBx*uCy*uAz + 1/2*uCx*uAy*uBz - 1/2*uAx*uCy*uBz - 1/2*uBx*uAy*uCz + 1/2*uAx*uBy*uCz
 
      which is simply
      MU2=1/2*det( uA, uB, uC )
 
+     Anisotropic curvature measure is written as
+     MUXY = 1/2 < uM | < Y | uc-ua > X x (b-a) - < Y | ub-ua > X x (c-a) >
   */
   template < typename TRealPoint, typename TRealVector >
   class CorrectedNormalCurrentFormula
@@ -94,8 +96,14 @@ namespace DGtal
     typedef typename RealVector::Component Scalar;
     typedef std::vector< RealPoint >       RealPoints;
     typedef std::vector< RealVector >      RealVectors;
+    typedef SimpleMatrix< Scalar, 3, 3 >   RealTensor;
     typedef std::size_t                    Index;
-
+    static const Dimension dimension = RealPoint::dimension;
+    //-------------------------------------------------------------------------
+  public:
+    /// @name Formulas for mu0 measure
+    /// @{
+    
     /// Computes mu0 measure (area) of triangle abc given a constant
     /// corrected normal vector \a u.
     /// @param a any point
@@ -119,14 +127,15 @@ namespace DGtal
     /// @param ua the corrected normal vector at point a
     /// @param ub the corrected normal vector at point b
     /// @param uc the corrected normal vector at point c
-    /// @param unit_uM when 'true' forces the average normal vector
-    /// `(ua+ub+uc)/3` to be unitary, otherwise leave it as is.
+    /// @param unit_u when 'true' considers that interpolated
+    /// corrected normals should be made unitary, otherwise
+    /// interpolated corrected normals may have smaller norms.
     /// @return the mu0-measure of triangle abc, i.e. its area.
     static
     Scalar mu0InterpolatedU
     ( const RealPoint& a, const RealPoint& b, const RealPoint& c,
       const RealVector& ua, const RealVector& ub, const RealVector& uc,
-      bool unit_uM = false )
+      bool unit_u = false )
     {
       // MU0=1/2*det( uM, B-A, C-A )
       //    =  1/2 < ( (u_A + u_B + u_C)/3.0 ) | (AB x AC ) >
@@ -157,26 +166,309 @@ namespace DGtal
     /// corrected normal vector \a ua, \a \ub, \a uc.
     /// @param pts the (ccw ordered) points forming the vertices of a polygonal face.
     /// @param u the (ccw ordered) normal vectors at the corresponding vertices in \a pts.
-    /// @param unit_uM when 'true' forces the average normal vectors
-    /// to be unitary, otherwise leave it as is.
+    /// @param unit_u when 'true' considers that interpolated
+    /// corrected normals should be made unitary, otherwise
+    /// interpolated corrected normals may have smaller norms.
     /// @return the mu0-measure of the given polygonal face, i.e. its area.
     static
     Scalar mu0InterpolatedU( const RealPoints& pts, const RealVectors& u,
-			     bool unit_uM = false )
+			     bool unit_u = false )
     {
       ASSERT( pts.size() == u.size() );
       if ( pts.size() <  3 ) return 0.0;
       if ( pts.size() == 3 )
 	return mu0InterpolatedU( pts[ 0 ], pts[ 1 ], pts[ 2 ],
-				 u[ 0 ], u[ 1 ], u[ 2 ], unit_uM );
+				 u[ 0 ], u[ 1 ], u[ 2 ], unit_u );
       const RealPoint   b = barycenter( pts );
       const RealVector ub = barycenter( pts );
       Scalar          a = 0.0;
       for ( Index i = 0; i < pts.size(); i++ )
 	a += mu0InterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
-			       ub,   u[ i ],   u[ (i+1)%pts.size() ], unit_uM );
+			       ub,   u[ i ],   u[ (i+1)%pts.size() ], unit_u );
       return a;
     }
+
+    /// @}
+    
+    //-------------------------------------------------------------------------
+  public:
+    /// @name Formulas for mu1 measure
+    /// @{
+
+    /// Computes mu1 measure (mean curvature) of triangle abc given a constant
+    /// corrected normal vector \a u.
+    /// @param a any point
+    /// @param b any point
+    /// @param c any point
+    /// @param u the constant corrected normal vector to triangle abc
+    /// @return the mu1-measure of triangle abc, i.e. its mean curvature, always 0.0.
+    static
+    Scalar mu1ConstantU
+    ( const RealPoint& /* a */, const RealPoint& /* b */, const RealPoint& /* c */,
+      const RealVector& /* u */ )
+    {
+      return 0.0;
+    }
+
+    /// Computes mu1 measure (mean curvature) of triangle abc given an interpolated
+    /// corrected normal vector \a ua, \a \ub, \a uc.
+    /// @param a any point
+    /// @param b any point
+    /// @param c any point
+    /// @param ua the corrected normal vector at point a
+    /// @param ub the corrected normal vector at point b
+    /// @param uc the corrected normal vector at point c
+    /// @param unit_u when 'true' considers that interpolated
+    /// corrected normals should be made unitary, otherwise
+    /// interpolated corrected normals may have smaller norms.
+    /// @return the mu1-measure of triangle abc, i.e. its mean curvature.
+    static
+    Scalar mu1InterpolatedU
+    ( const RealPoint& a, const RealPoint& b, const RealPoint& c,
+      const RealVector& ua, const RealVector& ub, const RealVector& uc,
+      bool unit_u = false )
+    {
+      // MU1=1/2( | uM u_C-u_B A | + | uM u_A-u_C B | + | uM u_B-u_A C |
+      RealVector uM = ( ua+ub+uc ) / 3.0;
+      if ( uM ) uM /= uM.norm();
+      return O.5 * ( uM.crossProduct( uc - ub ).dotProduct( a )
+		     + uM.crossProduct( ua - uc ).dotProduct( b )
+		     + uM.crossProduct( ub - ua ).dotProduct( c ) );
+    }
+    
+    /// Computes mu1 measure (mean curvature) of polygonal face \a pts given a
+    /// constant corrected normal vector \a u.
+    /// @param pts the (ccw ordered) points forming the vertices of a polygonal face.
+    /// @param u the constant corrected normal vector to this polygonal face.
+    /// @return the mu1-measure of the given polygonal face, i.e. its mean curvature, always 0.0.
+    static
+    Scalar mu1ConstantU( const RealPoints& pts, const RealVector& u )
+    {
+      return 0.0;
+    }
+
+    /// Computes mean curvature of polygonal face \a pts given an interpolated
+    /// corrected normal vector \a ua, \a \ub, \a uc.
+    /// @param pts the (ccw ordered) points forming the vertices of a polygonal face.
+    /// @param u the (ccw ordered) normal vectors at the corresponding vertices in \a pts.
+    /// @param unit_u when 'true' considers that interpolated
+    /// corrected normals should be made unitary, otherwise
+    /// interpolated corrected normals may have smaller norms.
+    /// @return the mu1-measure of the given polygonal face, i.e. its mean curvature.
+    static
+    Scalar mu1InterpolatedU( const RealPoints& pts, const RealVectors& u,
+			     bool unit_u = false )
+    {
+      ASSERT( pts.size() == u.size() );
+      if ( pts.size() <  3 ) return 0.0;
+      if ( pts.size() == 3 )
+	return mu1InterpolatedU( pts[ 0 ], pts[ 1 ], pts[ 2 ],
+				 u[ 0 ], u[ 1 ], u[ 2 ], unit_u );
+      const RealPoint   b = barycenter( pts );
+      const RealVector ub = barycenter( pts );
+      Scalar          a = 0.0;
+      for ( Index i = 0; i < pts.size(); i++ )
+	a += mu1InterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
+			       ub,   u[ i ],   u[ (i+1)%pts.size() ], unit_u );
+      return a;
+    }
+
+    /// @}
+
+    //-------------------------------------------------------------------------
+  public:
+    /// @name Formulas for mu2 measure
+    /// @{
+
+    /// Computes mu2 measure (Gaussian curvature) of triangle abc given a constant
+    /// corrected normal vector \a u.
+    /// @param a any point
+    /// @param b any point
+    /// @param c any point
+    /// @param u the constant corrected normal vector to triangle abc
+    /// @return the mu2-measure of triangle abc, i.e. its Gaussian curvature, always 0.0.
+    static
+    Scalar mu2ConstantU
+    ( const RealPoint& /* a */, const RealPoint& /* b */, const RealPoint& /* c */,
+      const RealVector& /* u */ )
+    {
+      return 0.0;
+    }
+
+    /// Computes mu2 measure (Gaussian curvature) of triangle abc given an interpolated
+    /// corrected normal vector \a ua, \a \ub, \a uc.
+    /// @param a any point
+    /// @param b any point
+    /// @param c any point
+    /// @param ua the corrected normal vector at point a
+    /// @param ub the corrected normal vector at point b
+    /// @param uc the corrected normal vector at point c
+    /// @param unit_u when 'true' considers that interpolated
+    /// corrected normals should be made unitary, otherwise
+    /// interpolated corrected normals may have smaller norms.
+    /// @return the mu2-measure of triangle abc, i.e. its Gaussian curvature.
+    static
+    Scalar mu2InterpolatedU
+    ( const RealPoint& a, const RealPoint& b, const RealPoint& c,
+      const RealVector& ua, const RealVector& ub, const RealVector& uc,
+      bool unit_u = false )
+    {
+      // Using non unitary interpolated normals give
+      // MU2=1/2*det( uA, uB, uC )
+      // When normals are unitary, it is the area of a spherical triangle.
+      if ( unit_u )
+	{
+	  typedef SpaceND< dimension > Space;
+	  SphericalTriangle<Space> ST( ua, ub, uc ); // check order.
+	  return ST.algebraicArea();
+	}
+      else
+	return O.5 * ( ua.crossProduct( ub ).dotProduct( uc ) );
+    }
+    
+    /// Computes mu2 measure (Gaussian curvature) of polygonal face \a pts given a
+    /// constant corrected normal vector \a u.
+    /// @param pts the (ccw ordered) points forming the vertices of a polygonal face.
+    /// @param u the constant corrected normal vector to this polygonal face.
+    /// @return the mu2-measure of the given polygonal face, i.e. its Gaussian curvature, always 0.0.
+    static
+    Scalar mu2ConstantU( const RealPoints& pts, const RealVector& u )
+    {
+      return 0.0;
+    }
+    
+    /// Computes Gaussian curvature of polygonal face \a pts given an interpolated
+    /// corrected normal vector \a ua, \a \ub, \a uc.
+    /// @param pts the (ccw ordered) points forming the vertices of a polygonal face.
+    /// @param u the (ccw ordered) normal vectors at the corresponding vertices in \a pts.
+    /// @param unit_u when 'true' considers that interpolated
+    /// corrected normals should be made unitary, otherwise
+    /// interpolated corrected normals may have smaller norms.
+    /// @return the mu2-measure of the given polygonal face, i.e. its Gaussian curvature.
+    static
+    Scalar mu2InterpolatedU( const RealPoints& pts, const RealVectors& u,
+			     bool unit_u = false )
+    {
+      ASSERT( pts.size() == u.size() );
+      if ( pts.size() <  3 ) return 0.0;
+      if ( pts.size() == 3 )
+	return mu2InterpolatedU( pts[ 0 ], pts[ 1 ], pts[ 2 ],
+				 u[ 0 ], u[ 1 ], u[ 2 ], unit_u );
+      const RealPoint   b = barycenter( pts );
+      const RealVector ub = barycenter( pts );
+      Scalar          a = 0.0;
+      for ( Index i = 0; i < pts.size(); i++ )
+	a += mu2InterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
+			       ub,   u[ i ],   u[ (i+1)%pts.size() ], unit_u );
+      return a;
+    }
+    
+    /// @}
+    
+    //-------------------------------------------------------------------------
+  public:
+    /// @name Formulas for muXY measure
+    /// @{
+    
+    /// Computes muXY measure (anisotropic curvature) of triangle abc given a constant
+    /// corrected normal vector \a u.
+    /// @param a any point
+    /// @param b any point
+    /// @param c any point
+    /// @param u the constant corrected normal vector to triangle abc
+    /// @return the muXY-measure of triangle abc, i.e. its anisotropic curvature, always 0.0.
+    static
+    RealTensor muXYConstantU
+    ( const RealPoint& /* a */, const RealPoint& /* b */, const RealPoint& /* c */,
+      const RealVector& /* u */ )
+    {
+      return RealTensor { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+    }
+    
+    /// Computes muXY measure (anisotropic curvature) of triangle abc given an interpolated
+    /// corrected normal vector \a ua, \a \ub, \a uc.
+    /// @param a any point
+    /// @param b any point
+    /// @param c any point
+    /// @param ua the corrected normal vector at point a
+    /// @param ub the corrected normal vector at point b
+    /// @param uc the corrected normal vector at point c
+    /// @param unit_u when 'true' considers that interpolated
+    /// corrected normals should be made unitary, otherwise
+    /// interpolated corrected normals may have smaller norms.
+    /// @return the muXY-measure of triangle abc, i.e. its anisotropic curvature.
+    static
+    RealTensor muXYInterpolatedU
+    ( const RealPoint& a, const RealPoint& b, const RealPoint& c,
+      const RealVector& ua, const RealVector& ub, const RealVector& uc,
+      bool unit_u = false )
+    {
+      RealTensor T;
+      //  MUXY = 1/2 < uM | < Y | uc-ua > X x (b-a) - < Y | ub-ua > X x (c-a) >
+      //  MUXY = 1/2 ( < Y | ub-ua > | X uM (c-a) | - < Y | uc-ua > | X uM (b-a) | )
+      RealVector uM = ( ua+ub+uc ) / 3.0;
+      if ( uM ) uM /= uM.norm();
+      const RealVector uac = uc - ua;
+      const RealVector uab = ub - ua;
+      const RealVector  ab = b - a;
+      const RealVector  ac = c - a;
+      for ( Dimension i = 0; i < 3; ++i ) {
+	RealVector X = RealVector::base( i, 1.0 );
+	for ( Dimension j = 0; j < 3; ++j ) {
+	  // Since RealVector Y = RealVector::base( j, 1.0 );
+	  // < Y | uac > = uac[ j ]
+	  const Scalar tij =
+	    0.5 * uM.dot_product( uac[ j ] * X.crossProduct( ab )
+				  - uab[ j ] * X.crossProduct( ac ) );
+	  T.setComponent( i, j, tij );
+	}
+      }
+      return T;
+    }
+    
+    /// Computes muXY measure (anisotropic curvature) of polygonal face \a pts given a
+    /// constant corrected normal vector \a u.
+    /// @param pts the (ccw ordered) points forming the vertices of a polygonal face.
+    /// @param u the constant corrected normal vector to this polygonal face.
+    /// @return the muXY-measure of the given polygonal face, i.e. its anisotropic curvature, always 0.0.
+    static
+    RealTensor muXYConstantU( const RealPoints& pts, const RealVector& u )
+    {
+      return RealTensor { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+    }
+
+    /// Computes anisotropic curvature of polygonal face \a pts given an interpolated
+    /// corrected normal vector \a ua, \a \ub, \a uc.
+    /// @param pts the (ccw ordered) points forming the vertices of a polygonal face.
+    /// @param u the (ccw ordered) normal vectors at the corresponding vertices in \a pts.
+    /// @param unit_u when 'true' considers that interpolated
+    /// corrected normals should be made unitary, otherwise
+    /// interpolated corrected normals may have smaller norms.
+    /// @return the muXY-measure of the given polygonal face, i.e. its anisotropic curvature.
+    static
+    RealTensor muXYInterpolatedU( const RealPoints& pts, const RealVectors& u,
+				  bool unit_u = false )
+    {
+      ASSERT( pts.size() == u.size() );
+      if ( pts.size() <  3 ) return 0.0;
+      if ( pts.size() == 3 )
+	return muXYInterpolatedU( pts[ 0 ], pts[ 1 ], pts[ 2 ],
+				 u[ 0 ], u[ 1 ], u[ 2 ], unit_u );
+      const RealPoint   b = barycenter( pts );
+      const RealVector ub = barycenter( pts );
+      RealTensor        T = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+      for ( Index i = 0; i < pts.size(); i++ )
+	T += muXYInterpolatedU( b,  pts[ i ], pts[ (i+1)%pts.size() ],
+				ub,   u[ i ],   u[ (i+1)%pts.size() ], unit_u );
+      return a;
+    }
+    
+    /// @}
+
+    //-------------------------------------------------------------------------
+  public:
+    /// @name Other geometric services
+    /// @{
     
     /// Given a vector of points, returns its barycenter.
     /// @param pts any vector of points
@@ -200,6 +492,9 @@ namespace DGtal
       for ( auto v : vecs ) avg += v;
       return avg.getNormalized();
     }
+
+    /// @}
+    
   };
 
 } // namespace DGtal
