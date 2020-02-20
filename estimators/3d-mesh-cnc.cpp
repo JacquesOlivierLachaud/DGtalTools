@@ -119,7 +119,7 @@ namespace DGtal {
 	  if ( linestr.empty() ) continue; // skip empty line
 	  if ( linestr[0] == '#' ) continue; // skip comment line
 	  istringstream lineinput( linestr );
-	  lineinput >> keyword;
+	  std::operator>>( lineinput,  keyword );
 	  if ( keyword == "v" ) {
 	    lineinput >> p[ 0 ] >> p[ 1 ] >> p[ 2 ];
 	    // std::cout << "[" << l << "] v " << p << std::endl;
@@ -129,8 +129,8 @@ namespace DGtal {
 	    normals.push_back( n );
 	  } else if ( keyword == "f" ) {
 	    std::vector< Index > face, face_normals;
-	    lineinput >> indices;
 	    while ( ! lineinput.eof() ) {
+	      std::operator>>( lineinput, indices);
 	      if ( indices.empty() ) break;
 	      auto vtxinfo = split( indices, '/' );
 	      if ( vtxinfo.size() == 0 ) break;
@@ -138,7 +138,7 @@ namespace DGtal {
 	      Index vn = vtxinfo.size() >= 3 ? std::stoi( vtxinfo[ 2 ] ) : v;
 	      face.push_back( v - 1 );
 	      face_normals.push_back( vn - 1 );
-	      lineinput >> indices;
+	      indices = "";
 	    }
 	    if ( ! face.empty() && verifyIndices( face ) ) {
 	      faces.push_back( face );
@@ -247,7 +247,10 @@ int main( int argc, char** argv )
   general_opt.add_options()
     ( "help,h", "display this message" )
     ( "input,i", po::value<std::string>(), "input mesh OBJ file" )
-    ( "output,o", po::value<std::string>()->default_value( "cnc" ), "output mesh base filename" );
+    ( "output,o", po::value<std::string>()->default_value( "cnc" ), "output mesh base filename" )
+    ( "average-normals,a", po::value<int>()->default_value( 0 ), "averages normals by performing <n> times vertexNormals -> faceNormals -> vertexNormals." )
+    ( "unit-normals,u", "forces the interpolated normals to have unit norm." );
+
   //   ( "m-coef", po::value<double>()->default_value( 3.0 ), "the coefficient k that defines the radius of the ball used in measures, that is r := k h^b" )
   //   ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" );
   
@@ -341,13 +344,24 @@ int main( int argc, char** argv )
     smesh.computeFaceNormalsFromVertexNormals();
   else if ( smesh.vertexNormals().empty() )
     smesh.computeVertexNormalsFromFaceNormals();
+  auto nb_avg_normals = vm[ "average-normals"   ].as<int>();
+  for ( int i = 0; i < nb_avg_normals; i++ )
+    {
+      trace.info() << "face normals -> vertex normals" << std::endl;
+      smesh.computeFaceNormalsFromVertexNormals();
+      trace.info() << "vertex normals -> face normals" << std::endl;
+      smesh.computeVertexNormalsFromFaceNormals();
+    }
   trace.info() << smesh << std::endl;
   trace.endBlock();
 
   trace.beginBlock( "Compute measures" );
+  bool unit = vm.count( "unit-normals" );
+  trace.info() << "Using " << ( unit ? "unit" : "regular" )
+	       << " interpolated normals." << std::endl;
   typedef CorrectedNormalCurrentComputer< RealPoint, RealVector > CNCComputer;
   CNCComputer cnc( smesh );
-  cnc.computeInterpolatedMeasures( CNCComputer::Measure::ALL_MU );
+  cnc.computeInterpolatedMeasures( CNCComputer::Measure::ALL_MU, unit );
   double G = 0.0;
   for ( auto g : cnc.mu2 ) G += g;
   trace.info() << "Total Gauss curvature G=" << G << std::endl;
@@ -358,9 +372,12 @@ int main( int argc, char** argv )
   const auto colormap_name    = vm[ "colormap" ].as<std::string>();
   const auto zt               = vm[ "zero-tic" ].as<double>();
   auto params         = SH::defaultParameters();
-  const auto colormap = SH::getZeroTickedColorMap( minValue, maxValue,
-                                                   params( "colormap", colormap_name )
-                                                   ( "zero-tic", zt ) );
+  params( "colormap", colormap_name )( "zero-tic", zt );
+  const auto colormapH = SH::getZeroTickedColorMap
+    ( minValue, maxValue, params );
+  const auto colormapG = SH::getZeroTickedColorMap
+    ( ( minValue < 0.0 ? -1.0 : 1.0 ) * minValue*minValue,
+      maxValue*maxValue, params );
   
   trace.beginBlock( "Output mesh OBJ file" );
   auto output_basefile = vm[ "output"   ].as<std::string>();
@@ -372,18 +389,30 @@ int main( int argc, char** argv )
     trace.error() << "Error writing file <" << output_objfile << ">" << std::endl;
     return 2;
   }
-  auto colors = SH::Colors( smesh.nbFaces() );
+  trace.info() << "Writing mean and Gaussian curvature OBJ files." << std::endl;
+  auto colorsH = SH::Colors( smesh.nbFaces() );
+  auto colorsG = SH::Colors( smesh.nbFaces() );
   double min_h = cnc.mu1[ 0 ] / cnc.mu0[ 0 ];
   double max_h = cnc.mu1[ 0 ] / cnc.mu0[ 0 ];
-  for ( SH::Idx i = 0; i < colors.size(); i++ )
+  double min_g = cnc.mu2[ 0 ] / cnc.mu0[ 0 ];
+  double max_g = cnc.mu2[ 0 ] / cnc.mu0[ 0 ];
+  for ( SH::Idx i = 0; i < colorsH.size(); i++ )
     {
+      trace.info() << i << " mu1=" << cnc.mu1[ i ] << " mu2=" << cnc.mu2[ i ];
       double h =  cnc.mu1[ i ] / cnc.mu0[ i ];
+      double g =  cnc.mu2[ i ] / cnc.mu0[ i ];
       min_h    = std::min( h, min_h );
       max_h    = std::max( h, max_h );
-      trace.info() << " " << h;
-      colors[ i ] = colormap( h );
+      min_g    = std::min( g, min_g );
+      max_g    = std::max( g, max_g );
+      //trace.info() << " h=" << h << " g=" << g << std::endl;
+      colorsH[ i ] = colormapH( h );
+      colorsG[ i ] = colormapG( g );
     }
-  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colors );
+  trace.info() << "Mean  curvature: " << min_h << " <= H <= " << max_h << std::endl;
+  trace.info() << "Gauss curvature: " << min_g << " <= G <= " << max_g << std::endl;
+  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colorsH );
+  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G", smesh, colorsG );
   trace.endBlock();
 
       
