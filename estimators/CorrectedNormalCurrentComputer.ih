@@ -176,6 +176,49 @@ computeInterpolatedMuXY( bool unit_u )
   return true;
 }
 
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::CorrectedNormalCurrentComputer<TRealPoint, TRealVector>::Scalar
+DGtal::CorrectedNormalCurrentComputer<TRealPoint, TRealVector>::
+interpolatedMu0 ( const WeightedFaces& wfaces ) const
+{
+  Scalar m = 0.0;
+  for ( auto wf : wfaces )  m += wf.second * mu0[ wf.first ];
+  return m;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::CorrectedNormalCurrentComputer<TRealPoint, TRealVector>::Scalar
+DGtal::CorrectedNormalCurrentComputer<TRealPoint, TRealVector>::
+interpolatedMu1 ( const WeightedFaces& wfaces ) const
+{
+  Scalar m = 0.0;
+  for ( auto wf : wfaces )  m += wf.second * mu1[ wf.first ];
+  return m;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::CorrectedNormalCurrentComputer<TRealPoint, TRealVector>::Scalar
+DGtal::CorrectedNormalCurrentComputer<TRealPoint, TRealVector>::
+interpolatedMu2 ( const WeightedFaces& wfaces ) const
+{
+  Scalar m = 0.0;
+  for ( auto wf : wfaces )  m += wf.second * mu2[ wf.first ];
+  return m;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::CorrectedNormalCurrentComputer<TRealPoint, TRealVector>::RealTensor
+DGtal::CorrectedNormalCurrentComputer<TRealPoint, TRealVector>::
+interpolatedMuXY( const WeightedFaces& wfaces ) const
+{
+  RealTensor m = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+  for ( auto wf : wfaces )  m += wf.second * muXY[ wf.first ];
+  return m;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////

@@ -85,10 +85,15 @@ namespace DGtal
     typedef std::size_t                             Size;
     /// The type used for numbering vertices
     typedef std::size_t                             Index;
-    /// The type that defines the vertices of a face.
-    typedef std::vector< Index >                    FaceVertices;
-    /// The type that defines the faces of a vertex.
-    typedef std::vector< Index >                    VertexFaces;
+    typedef Index                                   Face;
+    typedef std::pair< Face, Scalar >               WeightedFace;
+    typedef Index                                   Vertex;
+    typedef std::pair< Vertex, Scalar >             WeightedVertex;
+    /// The type that defines a range of vertices
+    typedef std::vector< Vertex >                   Vertices;
+    /// The type that defines a range of faces
+    typedef std::vector< Face >                     Faces;
+    typedef std::vector< WeightedFace >             WeightedFaces;
 
     enum class Measure { MU0, MU1, MU2, MUXY, ALL_MU };
 
@@ -101,7 +106,16 @@ namespace DGtal
     bool computeInterpolatedMu1     ( bool unit_u = false );
     bool computeInterpolatedMu2     ( bool unit_u = false );
     bool computeInterpolatedMuXY    ( bool unit_u = false );
-    
+
+    /// Given weighted faces, returns its interpolated mu0 measure.
+    Scalar     interpolatedMu0 ( const WeightedFaces& wfaces ) const;
+    /// Given weighted faces, returns its interpolated mu1 measure.
+    Scalar     interpolatedMu1 ( const WeightedFaces& wfaces ) const;
+    /// Given weighted faces, returns its interpolated mu2 measure.
+    Scalar     interpolatedMu2 ( const WeightedFaces& wfaces ) const;
+    /// Given weighted faces, returns its interpolated muXY measure.
+    RealTensor interpolatedMuXY( const WeightedFaces& wfaces ) const;
+
     // ------------------------- Public Datas ------------------------------
   public:
     /// Per-face mu0 measure (area).

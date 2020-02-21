@@ -69,16 +69,22 @@ namespace DGtal
     typedef SimplifiedMesh< RealPoint, RealVector > Self;
     static const Dimension dimension = RealPoint::dimension;
     BOOST_STATIC_ASSERT( ( dimension == 3 ) );
-
+    typedef typename RealVector::Component          Scalar;
+    typedef std::vector<Scalar>                     Scalars;
     /// The type for counting elements.
     typedef std::size_t                             Size;
-    /// The type used for numbering vertices
+    /// The type used for numbering vertices and faces
     typedef std::size_t                             Index;
+    typedef Index                                   Face;
+    typedef std::pair< Face, Scalar >               WeightedFace;
+    typedef Index                                   Vertex;
+    typedef std::pair< Vertex, Scalar >             WeightedVertex;
     /// The type that defines a range of vertices
-    typedef std::vector< Index >                    Vertices;
+    typedef std::vector< Vertex >                   Vertices;
     /// The type that defines a range of faces
-    typedef std::vector< Index >                    Faces;
-
+    typedef std::vector< Face >                     Faces;
+    typedef std::vector< WeightedFace >             WeightedFaces;
+    
     //---------------------------------------------------------------------------
   public:
     /// @name Standard services
@@ -177,6 +183,29 @@ namespace DGtal
 
     /// @}
 
+    //---------------------------------------------------------------------------
+  public:
+    /// @name Geometric services
+    /// @{
+
+    RealPoint faceCentroid( Index f ) const;
+
+    WeightedFaces
+    computeFacesInclusionsInBall( Scalar r, Index f ) const;
+    
+    /// Computes an approximation of the inclusion ratio of a given
+    /// face \a f with a ball of radius \a r and center \a p.
+    ///
+    /// @param p the center of the ball.
+    /// @param r the radius of the ball.
+    /// @param f any index of face.
+    ///
+    /// @return the inclusion ratio as a scalar between 0 (no
+    /// intersection) and 1 (inclusion).
+    Scalar inclusionRatio( RealPoint p, Scalar r, Index f ) const;
+
+    /// @}
+    
     // ----------------------- Interface --------------------------------------
   public:
 
@@ -194,12 +223,20 @@ namespace DGtal
     
     // ------------------------- Protected Datas ------------------------------
   protected:
-
+    /// For each face, its range of incident vertices
     std::vector< Vertices >     myIncidentVertices;
+    /// For each vertex, its range of incident faces
     std::vector< Faces >        myIncidentFaces;
+    /// For each vertex, its position
     std::vector< RealPoint >    myPositions;
+    /// For each vertex, its normal vector
     std::vector< RealVector >   myVertexNormals;
+    /// For each face, its normal vector
     std::vector< RealVector >   myFaceNormals;
+    /// For each face, its range of neighbor faces (no particular order)
+    std::vector< Faces >        myNeighborFaces;
+    /// For each vertex, its range of neighbor vertices (no particular order)
+    std::vector< Vertices >     myNeighborVertices;
 
     
     // ------------------------- Private Datas --------------------------------
@@ -207,7 +244,10 @@ namespace DGtal
 
 
     // ------------------------- Internals ------------------------------------
-  private:
+  protected:
+
+    /// Computes neighboring information.
+    void computeNeighbors();
     
     
   }; // end of class SimplifiedMesh

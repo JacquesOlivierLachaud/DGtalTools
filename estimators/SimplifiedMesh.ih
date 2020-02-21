@@ -29,6 +29,7 @@
 
 //////////////////////////////////////////////////////////////////////////////
 #include <cstdlib>
+#include <limits>
 #include "DGtal/shapes/MeshHelpers.h"
 //////////////////////////////////////////////////////////////////////////////
 
@@ -80,6 +81,7 @@ init( RealPointIterator itPos, RealPointIterator itPosEnd,
 	}
       myIncidentVertices.push_back( f_vtcs );
     }
+  computeNeighbors();
   return ok;
 }
 
@@ -177,6 +179,71 @@ computeVertexNormalsFromFaceNormals()
     }
 }
 
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::RealPoint
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+faceCentroid( Index f ) const
+{
+  RealPoint c;
+  for ( auto v : myIncidentVertices[ f ] )
+    c += myPositions[ v ];
+  return c / myIncidentVertices[ f ].size();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::WeightedFaces 
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeFacesInclusionsInBall( Scalar r, Index f ) const
+{
+  WeightedFaces result;
+  RealPoint p = faceCentroid( f );
+  std::set< Index > marked;
+  std::queue< Index > active;
+  active.push( f );
+  marked.insert( f );
+  while ( ! active.empty() )
+    {
+      Index current = active.front();
+      active.pop();
+      Scalar weight = inclusionRatio( p, r, current );
+      if ( weight > 0.0 )
+	{
+	  result.push_back( std::make_pair( current, weight ) );
+	  auto neighbors = myNeighborFaces[ current ];
+	  for ( auto n : neighbors )
+	    if ( marked.find( n ) == marked.end() )
+	      {
+		active.push( n );
+		marked.insert( n );
+	      }
+	}
+    }
+  // trace.info() << "#Marked=" << marked.size()
+  // 	       << " #Result=" << result.size() << std::endl;
+  return result;
+}
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalar
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+inclusionRatio( RealPoint p, Scalar r, Index f ) const
+{
+  const auto vertices = myIncidentVertices[ f ];
+  const RealPoint   b = faceCentroid( f );
+  Scalar        d_min = ( b - p ).norm();
+  Scalar        d_max = d_min;
+  for ( auto v : vertices )
+    {
+      Scalar    d = ( myPositions[ v ] - p ).norm();
+      d_max = std::max( d_max, d );
+      d_min = std::min( d_min, d );
+    }
+  if      ( d_max <= r     ) return 1.0;
+  else if ( r     <= d_min ) return 0.0;
+  return ( r - d_min ) / ( d_max - d_min );
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -192,8 +259,15 @@ selfDisplay ( std::ostream & out ) const
       << " #V=" << myPositions.size()
       << " #VN=" << myVertexNormals.size()
       << " #F=" << myIncidentVertices.size()
-      << " #FN=" << myFaceNormals.size()
-      << "]";
+      << " #FN=" << myFaceNormals.size();
+  double nb_nf = 0.0;
+  double nb_nv = 0.0;
+  for ( auto nf : myNeighborFaces )    nb_nf += nf.size();
+  for ( auto nv : myNeighborVertices ) nb_nv += nv.size();
+  nb_nf /= nbFaces();
+  nb_nv /= nbVertices();
+  out << " E[IF]=" << nb_nf << " E[IV]=" << nb_nv;
+  out << "]";
 }
 
 //-----------------------------------------------------------------------------
@@ -210,6 +284,45 @@ isValid() const
 }
 
 
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeNeighbors()
+{
+  myNeighborFaces   .resize( nbFaces() );
+  myNeighborVertices.resize( nbVertices() );
+  // For each face, computes its neighboring faces
+  Index idx_f = 0;
+  for ( auto incident_vertices : incidentVertices() )
+    {
+      std::set< Index > neighbor_faces_set;
+      for ( auto idx_v : incident_vertices )
+	{
+	  const auto & incident_faces = incidentFaces()[ idx_v ];
+	  neighbor_faces_set.insert( incident_faces.begin(), incident_faces.end() );
+	}
+      neighbor_faces_set.erase( idx_f );
+      Faces neighbor_faces( neighbor_faces_set.begin(), neighbor_faces_set.end() );
+      myNeighborFaces[ idx_f++ ] = neighbor_faces;
+    }
+  // For each vertex, computes its neighboring vertices
+  Index idx_v = 0;
+  for ( auto incident_faces : incidentFaces() )
+    {
+      std::set< Index > neighbor_vertices_set;
+      for ( auto idx_f : incident_faces )
+	{
+	  const auto & incident_vertices = incidentVertices()[ idx_f ];
+	  neighbor_vertices_set.insert( incident_vertices.begin(),
+					incident_vertices.end() );
+	}
+      neighbor_vertices_set.erase( idx_v );
+      Vertices neighbor_vertices( neighbor_vertices_set.begin(),
+				  neighbor_vertices_set.end() );
+      myNeighborVertices[ idx_v++ ] = neighbor_vertices;
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Implementation of inline functions                                        //

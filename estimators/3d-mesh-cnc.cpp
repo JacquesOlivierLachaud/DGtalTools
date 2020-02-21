@@ -249,18 +249,17 @@ int main( int argc, char** argv )
     ( "input,i", po::value<std::string>(), "input mesh OBJ file" )
     ( "output,o", po::value<std::string>()->default_value( "cnc" ), "output mesh base filename" )
     ( "average-normals,a", po::value<int>()->default_value( 0 ), "averages normals by performing <n> times vertexNormals -> faceNormals -> vertexNormals." )
-    ( "unit-normals,u", "forces the interpolated normals to have unit norm." );
-
-  //   ( "m-coef", po::value<double>()->default_value( 3.0 ), "the coefficient k that defines the radius of the ball used in measures, that is r := k h^b" )
-  //   ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" );
+    ( "unit-normals,u", "forces the interpolated normals to have unit norm." )
+    ( "m-coef", po::value<double>()->default_value( 3.0 ), "the coefficient k that defines the radius of the ball used in measures, that is r := k h^b" )
+    ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" );
   
   // EH::optionsImplicitShape   ( general_opt );
-  // EH::optionsDigitizedShape  ( general_opt );
+  EH::optionsDigitizedShape  ( general_opt );
   // EH::optionsVolFile         ( general_opt );
   // EH::optionsNoisyImage      ( general_opt );
   // EH::optionsNormalEstimators( general_opt );
-  // general_opt.add_options()
-  //   ( "quantity,Q", po::value<std::string>()->default_value( "Mu1" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), MuXY is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." )
+  general_opt.add_options()
+    ( "quantity,Q", po::value<std::string>()->default_value( "H" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), MuXY is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." );
   //   ( "anisotropy", po::value<std::string>()->default_value( "NAdd" ), "tells how is symmetrized the anisotropic measure mu_XY, in Mult|Add|NMult|NAdd: Mult forces symmetry by M*M^t, Add forces symmetry by 0.5*(M+M^t)+NxN, NMult and NAdd normalized by the area.")
   //   ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." )
   //   ( "interpolate,I", "when specified, it interpolate the given corrected normal vector field and uses the corresponding measures." );
@@ -360,6 +359,8 @@ int main( int argc, char** argv )
   trace.info() << "Using " << ( unit ? "unit" : "regular" )
 	       << " interpolated normals." << std::endl;
   typedef CorrectedNormalCurrentComputer< RealPoint, RealVector > CNCComputer;
+  typedef CNCComputer::Scalars     Scalars;
+  typedef CNCComputer::RealTensors RealTensors;
   CNCComputer cnc( smesh );
   cnc.computeInterpolatedMeasures( CNCComputer::Measure::ALL_MU, unit );
   double G = 0.0;
@@ -367,6 +368,28 @@ int main( int argc, char** argv )
   trace.info() << "Total Gauss curvature G=" << G << std::endl;
   trace.endBlock();
 
+  trace.beginBlock( "Computes balls" );
+  auto    quantity   = vm[ "quantity"   ].as<std::string>();
+  const double h     = vm[ "gridstep"  ].as<double>();
+  const double mcoef = vm[ "m-coef"    ].as<double>();
+  const double mpow  = vm[ "m-pow"     ].as<double>();
+  const double mr    = mcoef * pow( h, mpow );
+  trace.info() << "measuring ball radius = " << mr << std::endl;
+  Scalars       measured_ball_mu0 ( smesh.nbFaces() );
+  Scalars       measured_ball_mu1 ( smesh.nbFaces() );
+  Scalars       measured_ball_mu2 ( smesh.nbFaces() );
+  RealTensors   measured_ball_muXY( smesh.nbFaces() );
+  for ( int f = 0; f < smesh.nbFaces(); ++f )
+    {
+      trace.progressBar( f, smesh.nbFaces() );
+      auto wfaces = smesh.computeFacesInclusionsInBall( mr, f );
+      measured_ball_mu0 [ f ] = cnc.interpolatedMu0 ( wfaces );
+      measured_ball_mu1 [ f ] = cnc.interpolatedMu1 ( wfaces );
+      measured_ball_mu2 [ f ] = cnc.interpolatedMu2 ( wfaces );
+      measured_ball_muXY[ f ] = cnc.interpolatedMuXY( wfaces );
+    }
+  trace.endBlock();
+  
   const auto minValue         = vm[ "minValue" ].as<double>();
   const auto maxValue         = vm[ "maxValue" ].as<double>();
   const auto colormap_name    = vm[ "colormap" ].as<std::string>();
@@ -392,15 +415,15 @@ int main( int argc, char** argv )
   trace.info() << "Writing mean and Gaussian curvature OBJ files." << std::endl;
   auto colorsH = SH::Colors( smesh.nbFaces() );
   auto colorsG = SH::Colors( smesh.nbFaces() );
-  double min_h = cnc.mu1[ 0 ] / cnc.mu0[ 0 ];
-  double max_h = cnc.mu1[ 0 ] / cnc.mu0[ 0 ];
-  double min_g = cnc.mu2[ 0 ] / cnc.mu0[ 0 ];
-  double max_g = cnc.mu2[ 0 ] / cnc.mu0[ 0 ];
+  double min_h = measured_ball_mu1[ 0 ] / measured_ball_mu0[ 0 ];
+  double max_h = min_h;
+  double min_g = measured_ball_mu2[ 0 ] / measured_ball_mu0[ 0 ];
+  double max_g = min_g;
   for ( SH::Idx i = 0; i < colorsH.size(); i++ )
     {
-      trace.info() << i << " mu1=" << cnc.mu1[ i ] << " mu2=" << cnc.mu2[ i ];
-      double h =  cnc.mu1[ i ] / cnc.mu0[ i ];
-      double g =  cnc.mu2[ i ] / cnc.mu0[ i ];
+      //trace.info() << i << " mu1=" << cnc.mu1[ i ] << " mu2=" << cnc.mu2[ i ];
+      double h =  measured_ball_mu1[ i ] / measured_ball_mu0[ i ];
+      double g =  measured_ball_mu2[ i ] / measured_ball_mu0[ i ];
       min_h    = std::min( h, min_h );
       max_h    = std::max( h, max_h );
       min_g    = std::min( g, min_g );
