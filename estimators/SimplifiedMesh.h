@@ -74,11 +74,13 @@ namespace DGtal
     typedef std::size_t                             Size;
     /// The type used for numbering vertices
     typedef std::size_t                             Index;
-    /// The type that defines the vertices of a face.
-    typedef std::vector< Index >                    FaceVertices;
-    /// The type that defines the faces of a vertex.
-    typedef std::vector< Index >                    VertexFaces;
+    /// The type that defines a range of vertices
+    typedef std::vector< Index >                    Vertices;
+    /// The type that defines a range of faces
+    typedef std::vector< Index >                    Faces;
 
+    //---------------------------------------------------------------------------
+  public:
     /// @name Standard services
     /// @{
     
@@ -138,26 +140,28 @@ namespace DGtal
     
     /// @}
 
+    //---------------------------------------------------------------------------
+  public:
     /// @name Accessors
     /// @{
 
     /// @return the number of faces of the mesh.
     Size nbFaces() const
-    { return myFaces.size(); }
+    { return myIncidentVertices.size(); }
 
     /// @return the number of vertices of the mesh.
     Size nbVertices() const
-    { return myVertices.size(); }
+    { return myIncidentFaces.size(); }
     
     /// @return a const reference to the vector giving for each face
     /// its incident vertices.
-    const std::vector< FaceVertices >& incidentVertices() const
-    { return myFaces; }
+    const std::vector< Vertices >& incidentVertices() const
+    { return myIncidentVertices; }
 
     /// @return a const reference to the vector giving for each vertex
     /// its incident faces.
-    const std::vector< VertexFaces >& incidentFaces() const
-    { return myVertices; }
+    const std::vector< Faces >& incidentFaces() const
+    { return myIncidentFaces; }
 
     /// @return a const reference to the vector of positions (of vertices).
     const std::vector< RealVector >& positions() const
@@ -191,8 +195,8 @@ namespace DGtal
     // ------------------------- Protected Datas ------------------------------
   protected:
 
-    std::vector< FaceVertices > myFaces;
-    std::vector< VertexFaces >  myVertices;
+    std::vector< Vertices >     myIncidentVertices;
+    std::vector< Faces >        myIncidentFaces;
     std::vector< RealPoint >    myPositions;
     std::vector< RealVector >   myVertexNormals;
     std::vector< RealVector >   myFaceNormals;
@@ -241,8 +245,8 @@ namespace DGtal
     typedef DGtal::SimplifiedMesh< RealPoint, RealVector > SimplifiedMesh;
     typedef typename SimplifiedMesh::Size           Size;
     typedef typename SimplifiedMesh::Index          Index;
-    typedef typename SimplifiedMesh::FaceVertices   FaceVertices;
-    typedef typename SimplifiedMesh::VertexFaces    VertexFaces;
+    typedef typename SimplifiedMesh::Vertices       Vertices;
+    typedef typename SimplifiedMesh::Faces          Faces;
 
     /// Checks that every index in \a indices are different from the others.
     /// @param indices a vector of integer indices
@@ -288,8 +292,8 @@ namespace DGtal
     typedef DGtal::SimplifiedMesh< RealPoint, RealVector > SimplifiedMesh;
     typedef typename SimplifiedMesh::Size           Size;
     typedef typename SimplifiedMesh::Index          Index;
-    typedef typename SimplifiedMesh::FaceVertices   FaceVertices;
-    typedef typename SimplifiedMesh::VertexFaces    VertexFaces;
+    typedef typename SimplifiedMesh::Vertices       Vertices;
+    typedef typename SimplifiedMesh::Faces          Faces;
     typedef std::vector< Color >                    Colors;
 
     /// Writes a simplified mesh in an output file (in OBJ file format).

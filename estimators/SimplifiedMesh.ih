@@ -60,25 +60,25 @@ init( RealPointIterator itPos, RealPointIterator itPosEnd,
 {
   clear();
   myPositions = std::vector< RealPoint >( itPos, itPosEnd );
-  myVertices.resize( myPositions.size() );
+  myIncidentFaces.resize( myPositions.size() );
   Index f = 0; // current face index
   bool ok = true;
   for ( ; ok && itFace != itFaceEnd; ++itFace, ++f )
     {
-      FaceVertices f_vtcs;
+      Vertices f_vtcs;
       for ( auto it = itFace->begin(), itE = itFace->end(); it != itE; ++it )
 	{
 	  Index vtx = *it;
-	  if ( vtx >= myVertices.size() )
+	  if ( vtx >= myIncidentFaces.size() )
 	    trace.warning() << "[SimplifiedMesh::init] Invalid vtx "
 			    << vtx << " at face " << f << std::endl;
 	  else
 	    {
-	      myVertices[ vtx ].push_back( f );
+	      myIncidentFaces[ vtx ].push_back( f );
 	      f_vtcs.push_back( vtx );
 	    }
 	}
-      myFaces.push_back( f_vtcs );
+      myIncidentVertices.push_back( f_vtcs );
     }
   return ok;
 }
@@ -89,8 +89,8 @@ void
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 clear()
 {
-  myFaces.clear();
-  myVertices.clear();
+  myIncidentVertices.clear();
+  myIncidentFaces.clear();
   myPositions.clear();
   myVertexNormals.clear();
   myFaceNormals.clear();
@@ -115,7 +115,7 @@ DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 setFaceNormals( RealVectorIterator itN, RealVectorIterator itNEnd )
 {
   myFaceNormals = std::vector< RealVector >( itN, itNEnd );
-  return myFaceNormals.size() == myFaces.size();
+  return myFaceNormals.size() == myIncidentVertices.size();
 }
 
 //-----------------------------------------------------------------------------
@@ -124,9 +124,9 @@ void
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 computeFaceNormalsFromPositions()
 {
-  myFaceNormals.resize( myFaces.size() );
+  myFaceNormals.resize( myIncidentVertices.size() );
   Index f = 0;
-  for ( auto face : myFaces )
+  for ( auto face : myIncidentVertices )
     {
       RealPoint  p; // barycenter
       RealVector n; // normal
@@ -151,9 +151,9 @@ DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 computeFaceNormalsFromVertexNormals()
 {
   if ( myVertexNormals.empty() ) return;
-  myFaceNormals.resize( myFaces.size() );
+  myFaceNormals.resize( myIncidentVertices.size() );
   Index f = 0;
-  for ( auto face : myFaces )
+  for ( auto face : myIncidentVertices )
     {
       RealVector n; // normal
       for ( auto idx : face ) n += myVertexNormals[ idx ];
@@ -167,9 +167,9 @@ DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 computeVertexNormalsFromFaceNormals()
 {
   if ( myFaceNormals.empty() ) return;
-  myVertexNormals.resize( myVertices.size() );
+  myVertexNormals.resize( myIncidentFaces.size() );
   Index v = 0;
-  for ( auto vertex : myVertices )
+  for ( auto vertex : myIncidentFaces )
     {
       RealVector n; // normal
       for ( auto idx : vertex ) n += myFaceNormals[ idx ];
@@ -191,7 +191,7 @@ selfDisplay ( std::ostream & out ) const
   out << "[SimplifiedMesh" << ( isValid() ? " (OK)" : " (KO)" )
       << " #V=" << myPositions.size()
       << " #VN=" << myVertexNormals.size()
-      << " #F=" << myFaces.size()
+      << " #F=" << myIncidentVertices.size()
       << " #FN=" << myFaceNormals.size()
       << "]";
 }
@@ -202,11 +202,11 @@ bool
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 isValid() const
 {
-  return myPositions.size() == myVertices.size()
+  return myPositions.size() == myIncidentFaces.size()
     && ( myVertexNormals.size() == 0
 	 || ( myVertexNormals.size() == myPositions.size() ) )
     && ( myFaceNormals.size() == 0
-	 || ( myFaceNormals.size() == myFaces.size() ) );
+	 || ( myFaceNormals.size() == myIncidentVertices.size() ) );
 }
 
 
