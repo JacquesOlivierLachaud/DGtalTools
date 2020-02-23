@@ -37,7 +37,7 @@
 #include "DGtal/helpers/StdDefs.h"
 
 #include "DGtal/helpers/Shortcuts.h"
-//#include "DGtal/helpers/ShortcutsGeometry.h"
+#include "DGtal/helpers/ShortcutsGeometry.h"
 #include "DGtal/shapes/PolygonalSurface.h"
 #include "EstimatorHelpers.h"
 #include "SimplifiedMesh.h"
@@ -232,35 +232,41 @@ int main( int argc, char** argv )
   typedef SimplifiedMeshWriter<RealPoint,RealVector> SimpleMeshWriter;
   
   typedef Shortcuts<KSpace>                     SH;
-  // typedef ShortcutsGeometry<KSpace>             SHG;
+  typedef ShortcutsGeometry<KSpace>             SHG;
   typedef EstimatorHelpers<KSpace>              EH;
-  // typedef SH::IdxDigitalSurface                 Surface;
-  // typedef Surface::DigitalSurfaceContainer      Container;
-  // typedef SH::RealVector                        RealVector;
-  // typedef SH::BinaryImage                       BinaryImage;
-  // typedef SH::ImplicitShape3D                   ImplicitShape3D;
+  typedef SH::IdxDigitalSurface                 Surface;
+  typedef Surface::DigitalSurfaceContainer      Container;
+  typedef SH::RealVector                        RealVector;
+  typedef SH::BinaryImage                       BinaryImage;
+  typedef SH::ImplicitShape3D                   ImplicitShape3D;
+  typedef SH::DigitalSurface                    DigitalSurface;
+  typedef SH::IdxDigitalSurface                 IdxDigitalSurface;
   // typedef FastCorrectedNormalCurrent<Container> Current;
-  // typedef Current::Vertex                       Vertex;
+  //typedef Current::Vertex                       Vertex;
   
   // parse command line ----------------------------------------------
   po::options_description general_opt( "Allowed options are" );
   general_opt.add_options()
     ( "help,h", "display this message" )
-    ( "input,i", po::value<std::string>(), "input mesh OBJ file" )
-    ( "output,o", po::value<std::string>()->default_value( "cnc" ), "output mesh base filename" )
-    ( "average-normals,a", po::value<int>()->default_value( 0 ), "averages normals by performing <n> times vertexNormals -> faceNormals -> vertexNormals." )
+    ( "input,i", po::value<std::string>(), "input file: may be a mesh (.OBJ) or a volume image (.vol)" )
+    ( "output,o", po::value<std::string>()->default_value( "cnc" ), "the basename for output obj files or <none> if no output obj is wanted." )
+    ( "average-normals,K", po::value<int>()->default_value( 0 ), "averages normals by performing <n> times vertexNormals -> faceNormals -> vertexNormals." )
     ( "unit-normals,u", "forces the interpolated normals to have unit norm." )
     ( "m-coef", po::value<double>()->default_value( 3.0 ), "the coefficient k that defines the radius of the ball used in measures, that is r := k h^b" )
     ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" );
   
-  // EH::optionsImplicitShape   ( general_opt );
+  EH::optionsImplicitShape   ( general_opt );
   EH::optionsDigitizedShape  ( general_opt );
-  // EH::optionsVolFile         ( general_opt );
-  // EH::optionsNoisyImage      ( general_opt );
-  // EH::optionsNormalEstimators( general_opt );
   general_opt.add_options()
-    ( "quantity,Q", po::value<std::string>()->default_value( "H" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), MuXY is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." );
-  //   ( "anisotropy", po::value<std::string>()->default_value( "NAdd" ), "tells how is symmetrized the anisotropic measure mu_XY, in Mult|Add|NMult|NAdd: Mult forces symmetry by M*M^t, Add forces symmetry by 0.5*(M+M^t)+NxN, NMult and NAdd normalized by the area.")
+    ("thresholdMin,m",  po::value<int>()->default_value(0), "threshold min (excluded) to define binary shape" )
+    ("thresholdMax,M",  po::value<int>()->default_value(255), "threshold max (included) to define binary shape" )
+    ("closed",  po::value<int>()->default_value(1), "tells if the cellular space is closed (1:default) or open." );
+  //  EH::optionsVolFile         ( general_opt );
+  EH::optionsNoisyImage      ( general_opt );
+  EH::optionsNormalEstimators( general_opt );
+  general_opt.add_options()
+    ( "quantity,Q", po::value<std::string>()->default_value( "H" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), MuXY is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." )
+    ( "anisotropy", po::value<std::string>()->default_value( "NAdd" ), "tells how is symmetrized the anisotropic measure mu_XY, in Mult|Add|NMult|NAdd: Mult forces symmetry by M*M^t, Add forces symmetry by 0.5*(M+M^t)+NxN, NMult and NAdd normalized by the area.");
   //   ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." )
   //   ( "interpolate,I", "when specified, it interpolate the given corrected normal vector field and uses the corresponding measures." );
   EH::optionsDisplayValues   ( general_opt );
@@ -268,10 +274,9 @@ int main( int argc, char** argv )
     ( "zero-tic", po::value<double>()->default_value( 0.0 ), "adds a black band around zero of given thickness in colormaps." );
 
   // //#endif
-  // general_opt.add_options()
-  //   ( "error", po::value<std::string>()->default_value( "error.txt" ), "the name of the output file that sum up l2 and loo errors in estimation." );
-  // general_opt.add_options()
-  //   ( "max-error", po::value<double>()->default_value( 0.2 ), "the error value corresponding to black." );
+  general_opt.add_options()
+    ( "error", po::value<std::string>()->default_value( "error.txt" ), "the name of the output file that sum up l2 and loo errors in estimation." )
+    ( "max-error", po::value<double>()->default_value( 0.2 ), "the error value corresponding to black." );
   // general_opt.add_options()
   //   ( "output,o", po::value<std::string>()->default_value( "none" ), "the basename for output obj files or none if no output obj is wanted." );
   
@@ -279,17 +284,27 @@ int main( int argc, char** argv )
   bool parseOK = EH::args2vm( general_opt, argc, argv, vm );
   bool neededArgsGiven=true;
 
-  // if ( vm.count( "polynomial-list" ) )
-  //   {
-  //     trace.info() << "List of predefined polynomials:" << std::endl;
-  //     auto L = SH::getPolynomialList();
-  //     for ( auto p : L ) {
-  // 	trace.info() << "  " << p.first << " -> " << p.second << std::endl;
-  //     }
-  //   }
+  if ( vm.count( "polynomial-list" ) )
+    {
+      trace.info() << "List of predefined polynomials:" << std::endl;
+      auto L = SH::getPolynomialList();
+      for ( auto p : L ) {
+	trace.info() << "  " << p.first << " -> " << p.second << std::endl;
+      }
+      return 0;
+    }
 
+  auto filename = vm.count( "input" ) ? vm[ "input" ].as<string>() : "";
+  auto idx = filename.rfind('.');
+  std::string extension = (idx != std::string::npos) ? filename.substr(idx+1) : "";
+  trace.info() << "filename=" << filename << " extension=" << extension << std::endl;
   if (parseOK && ( ! vm.count("polynomial") ) && ( ! vm.count( "input" ) ) ) {
     missingParam("--polynomial or --input");
+    neededArgsGiven = false;
+  }
+  if ( vm.count( "input" ) && ( extension != "vol" )
+       && ( extension != "obj" ) && ( extension != "OBJ" ) ) {
+    missingParam("Wrong input file extension (should be .vol, .obj, .OBJ)");
     neededArgsGiven = false;
   }
   
@@ -299,10 +314,108 @@ int main( int argc, char** argv )
                   << general_opt << "\n"
                   << "Basic usage: "<<std::endl
 		  << "\t 3d-mesh-fcnc -i mesh.obj" << std::endl
-                  << std::endl;
+		  << "\t 3d-mesh-fcnc -i image.vol" << std::endl
+		  << "\t 3d-mesh-fcnc -p goursat" << std::endl
+		  << "\t 3d-mesh-fcnc -p \"5*x^2-3*x*y*z+2*y^2-z^2-4*x*y^2\""
+		  << std::endl << std::endl;
       return 0;
     }
 
+  /////////////////////////////////////////////////////////////////////////////
+  // Checking quantities
+  /////////////////////////////////////////////////////////////////////////////
+  auto quantity   = vm[ "quantity"   ].as<std::string>();
+  auto anisotropy = vm[ "anisotropy" ].as<std::string>();
+  std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "MuXY", "HII", "GII" };
+  if ( std::count( quantities.begin(), quantities.end(), quantity ) == 0 ) {
+    trace.error() << "Quantity should be in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII.";
+    trace.info()  << " I read quantity=" << quantity << std::endl;
+    return 0;
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Building mesh from OBJ mesh file, VOL 3D image file, implicit polynomial
+  /////////////////////////////////////////////////////////////////////////////
+  SimpleMesh smesh;
+  bool polynomial = false;
+  bool volfile    = false;
+  bool meshfile   = false;
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Taking care of vol image file or implicit polynomial
+  KSpace                        K;   // Digital space.
+  CountedPtr<BinaryImage>       bimage( nullptr );
+  CountedPtr<ImplicitShape3D>   shape ( nullptr );
+  CountedPtr<DigitalSurface>    surface( nullptr );
+  CountedPtr<IdxDigitalSurface> idx_surface( nullptr );
+  auto params = SH::defaultParameters() | SHG::defaultParameters();
+
+  trace.beginBlock( "Make Shape" );
+  // Generic parameters.
+  params( "gridstep",          vm[ "gridstep" ].as<double>() );
+  params( "noise",             vm[ "noise"    ].as<double>() );
+  params( "surfelAdjacency",          0 ); // 0:interior
+  params( "nbTriesToFindABel",   100000 ); // number of tries in method Surfaces::findABel
+  params( "surfaceComponents", "AnyBig" ); // "AnyBig"|"All"
+  params( "projectionMaxIter",       20 ); // the maximum number of iter for the projection.
+  params( "projectionAccuracy",  0.0001 ); // zero-proximity stop crit. during projection.
+  params( "projectionGamma",        0.5 ); // the displacement coef. of the projection.
+  params( "verbose",                  1 );
+  params( "t-ring",            vm[ "trivial-ring" ].as<double>() );
+  params( "kernel",            vm[ "kernel"       ].as<string>() );
+  params( "R-radius",          vm[ "R-radius"     ].as<double>() );
+  params( "r-radius",          vm[ "r-radius"     ].as<double>() );
+  params( "alpha",             vm[ "alpha"        ].as<double>() );
+  params( "surfelEmbedding",   vm[ "embedding"    ].as<int>()    );
+  trace.info() << params << std::endl;
+  if ( vm.count( "polynomial" ) )
+    {
+      // Fill useful parameters
+      params( "polynomial", vm[ "polynomial" ].as<string>() );
+      params( "minAABB",    vm[ "minAABB"    ].as<double>() );
+      params( "maxAABB",    vm[ "maxAABB"    ].as<double>() );
+      params( "offset",     5.0 );
+      shape        = SH::makeImplicitShape3D( params );
+      K            = SH::getKSpace( params );
+      auto dshape  = SH::makeDigitizedImplicitShape3D( shape, params );
+      bimage       = SH::makeBinaryImage( dshape, params );
+      if ( bimage != nullptr ) polynomial = true;
+    }
+  else if ( vm.count( "input" ) && ( extension == "vol" ) )
+    {
+      // Fill useful parameters
+      params( "thresholdMin", vm[ "thresholdMin" ].as<int>() );
+      params( "thresholdMax", vm[ "thresholdMax" ].as<int>() );
+      params( "closed",       vm[ "closed" ].as<int>() );
+      bimage       = SH::makeBinaryImage( filename, params );
+      K            = SH::getKSpace( bimage, params );
+      if ( bimage != nullptr ) volfile = true;
+    }
+  auto size    = K.upperBound() - K.lowerBound();
+  trace.info() << "- Domain size is " << ( size[ 0 ] + 1 )
+  	       << " x " << ( size[ 1 ] + 1 )
+  	       << " x " << ( size[ 2 ] + 1 ) << std::endl;
+
+  {
+    unsigned int                nb = 0;
+    std::for_each( bimage->cbegin(), bimage->cend(),
+		   [&nb] ( bool v ) { nb += v ? 1 : 0; } );
+    trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
+  }
+  auto sembedder   = SH::getSCellEmbedder( K );
+  auto embedder    = SH::getCellEmbedder( K );
+  if ( bimage != nullptr )  surface     = SH::makeDigitalSurface( bimage, K, params );
+  if ( surface != nullptr ) idx_surface = SH::makeIdxDigitalSurface( surface );
+  if ( bimage != nullptr && surface == nullptr ) {
+    trace.error() << "- surface is empty (either empty or full volume). ";
+    trace.info()  << std::endl;
+    trace.endBlock();
+    return 1;
+  }
+  else if ( surface != nullptr )
+    trace.info() << "- surface has " << surface->size()<< " surfels." << std::endl;
+  trace.endBlock();
+  
   // PolySurf  psurf;
   // NormalMap vtx_normal_map;
   // NormalMap face_normal_map;
@@ -321,7 +434,6 @@ int main( int argc, char** argv )
   // 	       << " #NF=" << face_normal_map.size()
   // 	       << std::endl;
   trace.beginBlock( "Reading input mesh file" );
-  SimpleMesh smesh;
   auto mesh_file = vm[ "input"   ].as<std::string>();
   trace.info() << "Reading file <" << mesh_file << ">" << std::endl;
   ifstream mesh_input( mesh_file.c_str() );
@@ -369,7 +481,7 @@ int main( int argc, char** argv )
   trace.endBlock();
 
   trace.beginBlock( "Computes balls" );
-  auto    quantity   = vm[ "quantity"   ].as<std::string>();
+  // auto    quantity   = vm[ "quantity"   ].as<std::string>();
   const double h     = vm[ "gridstep"  ].as<double>();
   const double mcoef = vm[ "m-coef"    ].as<double>();
   const double mpow  = vm[ "m-pow"     ].as<double>();
@@ -394,7 +506,7 @@ int main( int argc, char** argv )
   const auto maxValue         = vm[ "maxValue" ].as<double>();
   const auto colormap_name    = vm[ "colormap" ].as<std::string>();
   const auto zt               = vm[ "zero-tic" ].as<double>();
-  auto params         = SH::defaultParameters();
+  //auto params         = SH::defaultParameters();
   params( "colormap", colormap_name )( "zero-tic", zt );
   const auto colormapH = SH::getZeroTickedColorMap
     ( minValue, maxValue, params );
@@ -439,82 +551,6 @@ int main( int argc, char** argv )
   trace.endBlock();
 
       
-  // auto quantity   = vm[ "quantity"   ].as<std::string>();
-  // auto anisotropy = vm[ "anisotropy" ].as<std::string>();
-  // std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "MuXY", "HII", "GII" };
-  // if ( std::count( quantities.begin(), quantities.end(), quantity ) == 0 ) {
-  //   trace.error() << "Quantity should be in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII.";
-  //   trace.info()  << " I read quantity=" << quantity << std::endl;
-  //   return 0;
-  // }
-
-  // // Digital space.
-  // KSpace                      K;
-  // unsigned int                nb = 0;
-  // CountedPtr<BinaryImage>     bimage( nullptr );
-  // CountedPtr<ImplicitShape3D> shape ( nullptr );
-  // auto params = SH::defaultParameters() | SHG::defaultParameters();
-  // trace.beginBlock( "Make Shape" );
-  // // Generic parameters.
-  // params( "gridstep",          vm[ "gridstep" ].as<double>() );
-  // params( "noise",             vm[ "noise"    ].as<double>() );
-  // params( "surfelAdjacency",          0 ); // 0:interior
-  // params( "nbTriesToFindABel",   100000 ); // number of tries in method Surfaces::findABel
-  // params( "surfaceComponents", "AnyBig" ); // "AnyBig"|"All"
-  // params( "projectionMaxIter",       20 ); // the maximum number of iter for the projection.
-  // params( "projectionAccuracy",  0.0001 ); // zero-proximity stop crit. during projection.
-  // params( "projectionGamma",        0.5 ); // the displacement coef. of the projection.
-  // params( "verbose",                  1 );
-  // params( "t-ring",            vm[ "trivial-ring" ].as<double>() );
-  // params( "kernel",            vm[ "kernel"       ].as<string>() );
-  // params( "R-radius",          vm[ "R-radius"     ].as<double>() );
-  // params( "r-radius",          vm[ "r-radius"     ].as<double>() );
-  // params( "alpha",             vm[ "alpha"        ].as<double>() );
-  // params( "surfelEmbedding",   vm[ "embedding"    ].as<int>()    );
-  // trace.info() << params << std::endl;
-  // if ( vm.count( "polynomial" ) )
-  //   {
-  //     // Fill useful parameters
-  //     params( "polynomial", vm[ "polynomial" ].as<string>() );
-  //     params( "minAABB",    vm[ "minAABB"    ].as<double>() );
-  //     params( "maxAABB",    vm[ "maxAABB"    ].as<double>() );
-  //     params( "offset",     5.0 );
-  //     shape        = SH::makeImplicitShape3D( params );
-  //     K            = SH::getKSpace( params );
-  //     auto dshape  = SH::makeDigitizedImplicitShape3D( shape, params );
-  //     bimage       = SH::makeBinaryImage( dshape, params );
-  //   }
-  // else if ( vm.count( "input" ) )
-  //   {
-  //     // Fill useful parameters
-  //     params( "thresholdMin", vm[ "thresholdMin" ].as<int>() );
-  //     params( "thresholdMax", vm[ "thresholdMax" ].as<int>() );
-  //     params( "closed",       vm[ "closed" ].as<int>() );
-  //     auto volfile = vm[ "input" ].as<string>();
-  //     bimage       = SH::makeBinaryImage( volfile, params );
-  //     K            = SH::getKSpace( bimage, params );
-  //   }
-  // auto size    = K.upperBound() - K.lowerBound();
-  // trace.info() << "- Domain size is " << ( size[ 0 ] + 1 )
-  // 	       << " x " << ( size[ 1 ] + 1 )
-  // 	       << " x " << ( size[ 2 ] + 1 ) << std::endl;
-
-  // std::for_each( bimage->cbegin(), bimage->cend(),
-  // 		 [&nb] ( bool v ) { nb += v ? 1 : 0; } );
-  // trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
-  
-  // auto sembedder   = SH::getSCellEmbedder( K );
-  // auto embedder    = SH::getCellEmbedder( K );
-  // auto surface     = SH::makeDigitalSurface( bimage, K, params );
-  // auto idx_surface = SH::makeIdxDigitalSurface( surface );
-  // if ( surface == 0 ) {
-  //   trace.error() << "- surface is empty (either empty or full volume). ";
-  //   trace.info()  << std::endl;
-  //   trace.endBlock();
-  //   return 1;
-  // }
-  // trace.info() << "- surface has " << surface->size()<< " surfels." << std::endl;
-  // trace.endBlock();
 
   // const auto minValue         = vm[ "minValue" ].as<double>();
   // const auto maxValue         = vm[ "maxValue" ].as<double>();
