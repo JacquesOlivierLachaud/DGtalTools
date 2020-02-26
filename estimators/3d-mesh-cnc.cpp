@@ -34,8 +34,8 @@
 
 #define GL_SILENCE_DEPRECATION
 #include "DGtal/base/Common.h"
+#include "DGtal/math/Statistic.h"
 #include "DGtal/helpers/StdDefs.h"
-
 #include "DGtal/helpers/Shortcuts.h"
 #include "DGtal/helpers/ShortcutsGeometry.h"
 #include "DGtal/shapes/PolygonalSurface.h"
@@ -178,6 +178,23 @@ namespace DGtal {
   };
 } // namespace DGtal
 
+  // PolySurf  psurf;
+  // NormalMap vtx_normal_map;
+  // NormalMap face_normal_map;
+  // auto mesh_file = vm[ "input"   ].as<std::string>();
+  // trace.info() << "Reading file <" << mesh_file << ">" << std::endl;
+  // ifstream mesh_input( mesh_file.c_str() );
+  // bool ok = PolySurfReader::read( mesh_input, psurf, vtx_normal_map, face_normal_map );
+  // if ( ! ok ) {
+  //   trace.error() << "Error reading file <" << mesh_file << ">" << std::endl;
+  //   return 1;
+  // }
+  // trace.info() << "PolygonalSurface: #V=" << psurf.nbVertices()
+  // 	       << " #E=" << psurf.nbEdges()
+  // 	       << " #F=" << psurf.nbFaces()
+  // 	       << " #NV=" << vtx_normal_map.size()
+  // 	       << " #NF=" << face_normal_map.size()
+  // 	       << std::endl;
 
 // template <typename Scalar>
 // GradientColorMap<Scalar> 
@@ -230,7 +247,7 @@ int main( int argc, char** argv )
   typedef SimplifiedMesh<RealPoint,RealVector>  SimpleMesh;
   typedef SimplifiedMeshReader<RealPoint,RealVector> SimpleMeshReader;
   typedef SimplifiedMeshWriter<RealPoint,RealVector> SimpleMeshWriter;
-  
+  typedef SimpleMesh::Index                     Index;
   typedef Shortcuts<KSpace>                     SH;
   typedef ShortcutsGeometry<KSpace>             SHG;
   typedef EstimatorHelpers<KSpace>              EH;
@@ -243,8 +260,10 @@ int main( int argc, char** argv )
   typedef SH::IdxDigitalSurface                 IdxDigitalSurface;
   // typedef FastCorrectedNormalCurrent<Container> Current;
   //typedef Current::Vertex                       Vertex;
-  
-  // parse command line ----------------------------------------------
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Create command line options
+  /////////////////////////////////////////////////////////////////////////////
   po::options_description general_opt( "Allowed options are" );
   general_opt.add_options()
     ( "help,h", "display this message" )
@@ -279,7 +298,13 @@ int main( int argc, char** argv )
     ( "max-error", po::value<double>()->default_value( 0.2 ), "the error value corresponding to black." );
   // general_opt.add_options()
   //   ( "output,o", po::value<std::string>()->default_value( "none" ), "the basename for output obj files or none if no output obj is wanted." );
-  
+  general_opt.add_options()
+    ( "digital-surface", po::value<std::string>()->default_value( "DUAL" ), "chooses which kind of digital surface is used for computations in DUAL|PRIMAL|PDUAL|PPRIMAL: DUAL dual marching-cubes surface, PRIMAL blocky quad primal surface, PDUAL same as DUAL but projected onto polynomial true surface (if possible), PPRIMAL same as PRIMAL but projected onto polynomial true surface (if possible).");
+
+
+  /////////////////////////////////////////////////////////////////////////////
+  // parse command line ----------------------------------------------
+  /////////////////////////////////////////////////////////////////////////////
   po::variables_map vm;
   bool parseOK = EH::args2vm( general_opt, argc, argv, vm );
   bool neededArgsGiven=true;
@@ -352,7 +377,8 @@ int main( int argc, char** argv )
 
   trace.beginBlock( "Make Shape" );
   // Generic parameters.
-  params( "gridstep",          vm[ "gridstep" ].as<double>() );
+  const double h = vm[ "gridstep" ].as<double>();
+  params( "gridstep",          h ); // gridstep
   params( "noise",             vm[ "noise"    ].as<double>() );
   params( "surfelAdjacency",          0 ); // 0:interior
   params( "nbTriesToFindABel",   100000 ); // number of tries in method Surfaces::findABel
@@ -368,6 +394,10 @@ int main( int argc, char** argv )
   params( "alpha",             vm[ "alpha"        ].as<double>() );
   params( "surfelEmbedding",   vm[ "embedding"    ].as<int>()    );
   trace.info() << params << std::endl;
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Case where input is polynomial.
+  /////////////////////////////////////////////////////////////////////////////
   if ( vm.count( "polynomial" ) )
     {
       // Fill useful parameters
@@ -381,6 +411,10 @@ int main( int argc, char** argv )
       bimage       = SH::makeBinaryImage( dshape, params );
       if ( bimage != nullptr ) polynomial = true;
     }
+  
+  /////////////////////////////////////////////////////////////////////////////
+  // Case where input is a 3D image vol file.
+  /////////////////////////////////////////////////////////////////////////////
   else if ( vm.count( "input" ) && ( extension == "vol" ) )
     {
       // Fill useful parameters
@@ -396,12 +430,13 @@ int main( int argc, char** argv )
   	       << " x " << ( size[ 1 ] + 1 )
   	       << " x " << ( size[ 2 ] + 1 ) << std::endl;
 
-  {
-    unsigned int                nb = 0;
-    std::for_each( bimage->cbegin(), bimage->cend(),
-		   [&nb] ( bool v ) { nb += v ? 1 : 0; } );
-    trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
-  }
+  if ( bimage != nullptr )
+    {
+      unsigned int                nb = 0;
+      std::for_each( bimage->cbegin(), bimage->cend(),
+		     [&nb] ( bool v ) { nb += v ? 1 : 0; } );
+      trace.info() << "- digital shape has " << nb << " voxels." << std::endl;
+    }
   auto sembedder   = SH::getSCellEmbedder( K );
   auto embedder    = SH::getCellEmbedder( K );
   if ( bimage != nullptr )  surface     = SH::makeDigitalSurface( bimage, K, params );
@@ -415,33 +450,127 @@ int main( int argc, char** argv )
   else if ( surface != nullptr )
     trace.info() << "- surface has " << surface->size()<< " surfels." << std::endl;
   trace.endBlock();
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Computing ground truth values if possible.
+  /////////////////////////////////////////////////////////////////////////////
+  SH::Scalars       expected_values;
+  SH::Scalars       measured_values;
+  SH::RealVectors   expected_normals;
+  SH::RealVectors   measured_normals;
+  Statistic<double> stat_expected_curv;
+  Statistic<double> stat_measured_curv;
+  double time_curv_ground_truth  = 0.0;
+  double time_curv_estimations   = 0.0;
+  double time_mu_estimations     = 0.0;
+  double time_normal_estimations = 0.0;
+  trace.beginBlock( "Compute surfels" );
+  params( "surfaceTraversal", "Default" );
+  const auto     surfels = ( surface != nullptr )
+    ? SH::getSurfelRange( surface, params )
+    : SH::SurfelRange();
+  trace.endBlock();
+  if ( polynomial )
+    {
+      trace.beginBlock( "Compute true curvatures" );
+      expected_values = ( ( quantity == "H" ) || ( quantity == "Mu1" )
+  			  || ( quantity == "HII" ) )
+  	? SHG::getMeanCurvatures    ( shape, K, surfels, params )
+  	: SHG::getGaussianCurvatures( shape, K, surfels, params );
+      stat_expected_curv.addValues( expected_values.cbegin(), expected_values.cend() );
+      stat_expected_curv.terminate();
+      trace.info() << "- truth curv: avg = " << stat_expected_curv.mean() << std::endl;
+      trace.info() << "- truth curv: min = " << stat_expected_curv.min() << std::endl;
+      trace.info() << "- truth curv: max = " << stat_expected_curv.max() << std::endl;
+      time_curv_ground_truth = trace.endBlock();
+    }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Compute primal/dual surfaces
+  /////////////////////////////////////////////////////////////////////////////
+  trace.beginBlock( "Compute primal/dual surface" );
+  auto digital_surface_mode = vm[ "digital-surface" ].as<std::string>();
+  bool blocky = digital_surface_mode == "PRIMAL" || digital_surface_mode == "DUAL"
+    || ! polynomial;
+  bool   dual = digital_surface_mode == "DUAL" || digital_surface_mode == "PDUAL";
+  SH::RealPoints  pos_surf; 
+  SH::RealPoints  ppos_surf;
+  SH::RealPoints  vertices;
+  SH::RealVectors normals;
+  std::vector< std::vector< Index > > faces;
+  SH::Cell2Index c2i;
+  if ( ! surfels.empty() )
+    { // Getting vertices positions.
+      trace.info() << "computing vertices" << std::endl;
+      if ( dual )
+	{ // dual surface
+	  pos_surf = SH::RealPoints( surfels.size() );
+	  std::transform( surfels.cbegin(), surfels.cend(), pos_surf.begin(),
+			  [&] (const SH::SCell& c) { return h * sembedder( c ); } );
+	}
+      else
+	{ // primal surface
+ 	  auto pointels = SH::getPointelRange( c2i, surface );
+	  pos_surf = SH::RealPoints( pointels.size() );
+	  std::transform( pointels.cbegin(), pointels.cend(), pos_surf.begin(),
+			  [&] (const SH::Cell& c) { return h * embedder( c ); } ); 
+	}
+      // project onto true surface if asked.
+      trace.info() << "projecting vertices" << std::endl;
+      if ( ! blocky ) ppos_surf = SHG::getPositions( shape, pos_surf, params );
+      vertices = blocky ? pos_surf : ppos_surf;
+      // Build faces
+      trace.info() << "build faces" << std::endl;
+      if ( dual )
+        { // dual surface
+	  for ( Index f = 0; f < idx_surface->nbFaces(); ++f )
+	    {
+	      const auto dual_vtcs = idx_surface->verticesAroundFace( f );
+	      std::vector< Index > dual_rvtcs( dual_vtcs.rbegin(), dual_vtcs.rend() );
+	      faces.push_back( dual_rvtcs );
+	    }
+	}
+      else
+        { // primal surface	  
+          for ( auto&& surfel : *surface )
+            {
+              const auto primal_surfel_vtcs = SH::getPointelRange( K, surfel );
+	      std::vector< Index > face;	      
+	      for ( auto&& primal_vtx : primal_surfel_vtcs )
+		face.push_back( c2i[ primal_vtx ] );
+	      faces.push_back( face );
+	    }
+	}
+    }
+  trace.endBlock();
   
-  // PolySurf  psurf;
-  // NormalMap vtx_normal_map;
-  // NormalMap face_normal_map;
-  // auto mesh_file = vm[ "input"   ].as<std::string>();
-  // trace.info() << "Reading file <" << mesh_file << ">" << std::endl;
-  // ifstream mesh_input( mesh_file.c_str() );
-  // bool ok = PolySurfReader::read( mesh_input, psurf, vtx_normal_map, face_normal_map );
-  // if ( ! ok ) {
-  //   trace.error() << "Error reading file <" << mesh_file << ">" << std::endl;
-  //   return 1;
-  // }
-  // trace.info() << "PolygonalSurface: #V=" << psurf.nbVertices()
-  // 	       << " #E=" << psurf.nbEdges()
-  // 	       << " #F=" << psurf.nbFaces()
-  // 	       << " #NV=" << vtx_normal_map.size()
-  // 	       << " #NF=" << face_normal_map.size()
-  // 	       << std::endl;
-  trace.beginBlock( "Reading input mesh file" );
-  auto mesh_file = vm[ "input"   ].as<std::string>();
-  trace.info() << "Reading file <" << mesh_file << ">" << std::endl;
-  ifstream mesh_input( mesh_file.c_str() );
-  bool ok = SimpleMeshReader::readOBJ( mesh_input, smesh );
-  if ( ! ok ) {
-    trace.error() << "Error reading file <" << mesh_file << ">" << std::endl;
-    return 1;
-  }
+  /////////////////////////////////////////////////////////////////////////////
+  // Build simplified mesh
+  /////////////////////////////////////////////////////////////////////////////
+  trace.beginBlock( "Build simplified mesh" );
+  if ( vm.count( "input" ) && ( ( extension == "obj" )
+				|| ( extension == "OBJ" ) ) )
+    {
+      // Case where input is a mesh obj file.
+      trace.beginBlock( "Reading input obj mesh file" );
+      trace.info() << "Reading file <" << filename << ">" << std::endl;
+      ifstream mesh_input( filename.c_str() );
+      bool  ok = SimpleMeshReader::readOBJ( mesh_input, smesh );
+      meshfile = true;
+      trace.endBlock();
+      if ( ! ok ) {
+	trace.error() << "Error reading file <" << filename << ">" << std::endl;
+	trace.endBlock();
+	return 1;
+      }
+    }
+  else if ( polynomial || volfile )
+    { // We build a mesh
+      trace.beginBlock( "Build mesh from primal/dual surface" );
+      smesh.init( vertices.cbegin(), vertices.cend(),
+		  faces.cbegin(),    faces.cend() );
+      trace.endBlock();
+    }
   trace.info() << smesh << std::endl;
   trace.endBlock();
 
@@ -482,7 +611,6 @@ int main( int argc, char** argv )
 
   trace.beginBlock( "Computes balls" );
   // auto    quantity   = vm[ "quantity"   ].as<std::string>();
-  const double h     = vm[ "gridstep"  ].as<double>();
   const double mcoef = vm[ "m-coef"    ].as<double>();
   const double mpow  = vm[ "m-pow"     ].as<double>();
   const double mr    = mcoef * pow( h, mpow );
