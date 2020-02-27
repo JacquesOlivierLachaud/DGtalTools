@@ -82,6 +82,7 @@ init( RealPointIterator itPos, RealPointIterator itPosEnd,
       myIncidentVertices.push_back( f_vtcs );
     }
   computeNeighbors();
+  computeEdges();
   return ok;
 }
 
@@ -181,6 +182,18 @@ computeVertexNormalsFromFaceNormals()
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Edge 
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+makeEdge( Vertex i, Vertex j ) const
+{
+  VertexPair vp = i < j ? std::make_pair( i,j ) : std::make_pair( j,i );
+  auto it = std::lower_bound( myEdgeVertices.cbegin(), myEdgeVertices.cend(), vp );
+  if ( it == myEdgeVertices.cend() || *it != vp ) return nbEdges();
+  return it - myEdgeVertices.cbegin();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::RealPoint
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 faceCentroid( Index f ) const
@@ -258,15 +271,19 @@ selfDisplay ( std::ostream & out ) const
   out << "[SimplifiedMesh" << ( isValid() ? " (OK)" : " (KO)" )
       << " #V=" << myPositions.size()
       << " #VN=" << myVertexNormals.size()
+      << " #E=" << myEdgeVertices.size()
       << " #F=" << myIncidentVertices.size()
       << " #FN=" << myFaceNormals.size();
-  double nb_nf = 0.0;
-  double nb_nv = 0.0;
-  for ( auto nf : myNeighborFaces )    nb_nf += nf.size();
-  for ( auto nv : myNeighborVertices ) nb_nv += nv.size();
-  nb_nf /= nbFaces();
-  nb_nv /= nbVertices();
-  out << " E[IF]=" << nb_nf << " E[IV]=" << nb_nv;
+  double nb_nf  = 0.0;
+  double nb_nv  = 0.0;
+  double nb_nfe = 0.0;
+  for ( auto nf  : myNeighborFaces )    nb_nf  += nf.size();
+  for ( auto nv  : myNeighborVertices ) nb_nv  += nv.size();
+  for ( auto nfe : myEdgeFaces )        nb_nfe += nfe.size();
+  nb_nf  /= nbFaces();
+  nb_nv  /= nbVertices();
+  nb_nfe /= nbEdges();
+  out << " E[IF]=" << nb_nf << " E[IV]=" << nb_nv << " E[IFE]=" << nb_nfe;
   out << "]";
 }
 
@@ -321,6 +338,37 @@ computeNeighbors()
       Vertices neighbor_vertices( neighbor_vertices_set.begin(),
 				  neighbor_vertices_set.end() );
       myNeighborVertices[ idx_v++ ] = neighbor_vertices;
+    }
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeEdges()
+{
+  std::map< VertexPair, std::vector<Face> > edge2face;
+  Index idx_f = 0;
+  for ( auto incident_vertices : incidentVertices() )
+    {
+      const Size n = incident_vertices.size();
+      for ( Size i = 0; i < n; i++ )
+	{
+	  VertexPair e = std::make_pair( incident_vertices[ i ],
+					 incident_vertices[ (i+1) % n ] );
+	  if ( e.second < e.first ) std::swap( e.first, e.second );
+	  edge2face[ e ].push_back( idx_f );
+	}
+      idx_f++;
+    }
+  myEdgeVertices.resize( edge2face.size() );
+  myEdgeFaces.resize( edge2face.size() );
+  Index idx_e = 0;
+  for ( auto e2f : edge2face )
+    {
+      myEdgeVertices[ idx_e ] = e2f.first;
+      myEdgeFaces   [ idx_e ] = e2f.second;
+      idx_e++;
     }
 }
 

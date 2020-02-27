@@ -76,15 +76,16 @@ namespace DGtal
     /// The type used for numbering vertices and faces
     typedef std::size_t                             Index;
     typedef Index                                   Face;
-    typedef std::pair< Face, Scalar >               WeightedFace;
+    typedef Index                                   Edge;
     typedef Index                                   Vertex;
+    typedef std::pair< Face, Scalar >               WeightedFace;
     typedef std::pair< Vertex, Scalar >             WeightedVertex;
     /// The type that defines a range of vertices
     typedef std::vector< Vertex >                   Vertices;
     /// The type that defines a range of faces
     typedef std::vector< Face >                     Faces;
     typedef std::vector< WeightedFace >             WeightedFaces;
-    
+    typedef std::pair< Vertex, Vertex >             VertexPair;
     //---------------------------------------------------------------------------
   public:
     /// @name Standard services
@@ -155,9 +156,20 @@ namespace DGtal
     Size nbFaces() const
     { return myIncidentVertices.size(); }
 
+    /// @return the number of (unordered) edges of the mesh.
+    Size nbEdges() const
+    { return myEdgeVertices.size(); }
+
     /// @return the number of vertices of the mesh.
     Size nbVertices() const
     { return myIncidentFaces.size(); }
+
+    /// @param i any vertex of the mesh
+    /// @param j any vertex of the mesh
+    /// @return the edge index of edge (i,j) or `nbEdges()` if this
+    /// edge does not exist.
+    /// @note O(log E) time complexity.
+    Edge makeEdge( Vertex i, Vertex j ) const;
     
     /// @return a const reference to the vector giving for each face
     /// its incident vertices.
@@ -181,6 +193,27 @@ namespace DGtal
     const std::vector< RealVector >& faceNormals() const
     { return myFaceNormals; }
 
+    /// @return a const reference to the vector of neighbor faces for each face.
+    const std::vector< Faces >& neighborFaces() const
+    { return myNeighborFaces; }
+
+    /// @return a const reference to the vector of neighbor vertices for each vertex.
+    const std::vector< Vertices >& neighborVertices() const
+    { return myNeighborVertices; }
+
+    /// @return a const reference to the vector giving for each edge
+    /// its two vertices (as a pair (i,j), i<j).
+    /// @note edges are sorted in increasing order.
+    const std::vector< VertexPair >& edgeVertices() const
+    { return myEdgeVertices; }
+    
+    /// @return a const reference to the vector giving for each edge
+    /// its incident faces (one, two, or more if non manifold)
+    const std::vector< Faces >& edgeFaces() const
+    { return myEdgeFaces; }
+
+    
+    
     /// @}
 
     //---------------------------------------------------------------------------
@@ -237,7 +270,10 @@ namespace DGtal
     std::vector< Faces >        myNeighborFaces;
     /// For each vertex, its range of neighbor vertices (no particular order)
     std::vector< Vertices >     myNeighborVertices;
-
+    /// For each edge, its two vertices
+    std::vector< VertexPair >   myEdgeVertices;
+    /// For each edge, its faces (one, two, or more if non manifold)
+    std::vector< Faces >        myEdgeFaces;
     
     // ------------------------- Private Datas --------------------------------
   private:
@@ -248,6 +284,8 @@ namespace DGtal
 
     /// Computes neighboring information.
     void computeNeighbors();
+    /// Computes edge information.
+    void computeEdges();
     
     
   }; // end of class SimplifiedMesh
