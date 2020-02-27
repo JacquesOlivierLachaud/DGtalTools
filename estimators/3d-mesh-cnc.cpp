@@ -377,7 +377,8 @@ int main( int argc, char** argv )
 
   trace.beginBlock( "Make Shape" );
   // Generic parameters.
-  const double h = vm[ "gridstep" ].as<double>();
+  const double       h = vm[ "gridstep" ].as<double>();
+  const auto estimator = vm[ "estimator" ].as<string>();
   params( "gridstep",          h ); // gridstep
   params( "noise",             vm[ "noise"    ].as<double>() );
   params( "surfelAdjacency",          0 ); // 0:interior
@@ -543,6 +544,35 @@ int main( int argc, char** argv )
 	}
     }
   trace.endBlock();
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Compute true and/or estimated normal vectors
+  /////////////////////////////////////////////////////////////////////////////
+  if ( polynomial )
+    {
+      trace.beginBlock( "Compute true normals" );
+      expected_normals = SHG::getNormalVectors( shape, K, surfels, params );
+      trace.endBlock();
+    }
+  if ( polynomial || volfile )
+    {
+      trace.beginBlock( "Estimate normals" );
+      if ( estimator == "True" && polynomial )
+	measured_normals = expected_normals;
+      else if ( estimator == "CTrivial" )
+	measured_normals = SHG::getCTrivialNormalVectors( surface, surfels, params );
+      else if ( estimator == "VCM" )
+	measured_normals = SHG::getVCMNormalVectors( surface, surfels, params );
+      else if ( estimator == "II" ) {
+	measured_normals = SHG::getIINormalVectors( bimage, surfels, params );
+	auto oriented_n = SHG::getCTrivialNormalVectors( surface, surfels, params );
+	SHG::orientVectors( measured_normals, oriented_n );
+      }
+      else if ( estimator == "Trivial" ) 
+	measured_normals = SHG::getTrivialNormalVectors( K, surfels );
+      // else "Geometric" normals.
+      time_normal_estimations = trace.endBlock();
+    }
   
   /////////////////////////////////////////////////////////////////////////////
   // Build simplified mesh
@@ -569,11 +599,20 @@ int main( int argc, char** argv )
       trace.beginBlock( "Build mesh from primal/dual surface" );
       smesh.init( vertices.cbegin(), vertices.cend(),
 		  faces.cbegin(),    faces.cend() );
+      if ( ! measured_normals.empty() )	{
+	if ( dual )
+	  smesh.setVertexNormals( measured_normals.cbegin(), measured_normals.cend() );
+	else
+	  smesh.setFaceNormals( measured_normals.cbegin(), measured_normals.cend() );
+      }
       trace.endBlock();
     }
   trace.info() << smesh << std::endl;
   trace.endBlock();
 
+  /////////////////////////////////////////////////////////////////////////////
+  // Compute normals
+  /////////////////////////////////////////////////////////////////////////////
   trace.beginBlock( "Compute normals if necessary" );
   if ( smesh.faceNormals().empty() && smesh.vertexNormals().empty() )
     {
