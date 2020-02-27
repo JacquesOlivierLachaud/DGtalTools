@@ -231,7 +231,8 @@ namespace DGtal
       // MU1=1/2( | uM u_C-u_B A | + | uM u_A-u_C B | + | uM u_B-u_A C |
       RealVector uM = ( ua+ub+uc ) / 3.0;
       if ( unit_u ) uM /= uM.norm();
-      return 0.5 * ( uM.crossProduct( uc - ub ).dot( a )
+      // JOL: if I put 0.5, we obtain twice the mean curvature.
+      return 0.25 * ( uM.crossProduct( uc - ub ).dot( a )
 		     + uM.crossProduct( ua - uc ).dot( b )
 		     + uM.crossProduct( ub - ua ).dot( c ) );
     }
