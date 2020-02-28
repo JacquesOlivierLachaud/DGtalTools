@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <limits>
 #include "DGtal/shapes/MeshHelpers.h"
+#include "DGtal/helpers/Shortcuts.h"
 //////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -620,6 +621,47 @@ writeOBJ( std::string            objfile,
   output_obj << "# " << smesh.incidentVertices().size() << " faces" << std::endl;
   output_mtl.close();
   return output_obj.good();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+template <typename EdgePredicate>
+bool
+DGtal::SimplifiedMeshWriter<TRealPoint, TRealVector>::
+writeEdgeLinesOBJ( std::string            objfile,
+		   const SimplifiedMesh & smesh,
+		   const EdgePredicate &  edge_predicate,
+		   const double           relative_thickness,
+		   const Color&           ambient_color,
+		   const Color&           diffuse_color,
+		   const Color&           specular_color )
+{
+  typedef KhalimskySpaceND< 3, int >    KSpace;
+  typedef Shortcuts< KSpace >           SH;
+  typedef typename SH::RealPoint        RealPoint;
+  typedef typename SH::RealPoints       RealPoints;
+  typedef typename SH::RealVector       RealVector;
+  typedef typename SH::RealVectors      RealVectors;
+  typedef typename SH::Colors           Colors;
+  typedef typename SimplifiedMesh::Edge Edge;
+
+  RealPoints  positions;
+  RealVectors edge_vectors;
+  double      lengths = 0.0;
+  for ( Edge e = 0; e < smesh.nbEdges(); ++e )
+    {
+      auto vtcs = smesh.edgeVertices()[ e ];
+      const RealPoint  p  = smesh.positions()[ vtcs.first  ];
+      const RealVector pq = smesh.positions()[ vtcs.second ] - p;
+      lengths += pq.norm();
+      if ( ! edge_predicate( e ) ) continue;
+      positions.push_back( p );
+      edge_vectors.push_back( pq );
+    }
+  lengths /= smesh.nbEdges();
+  return SH::saveVectorFieldOBJ
+    ( positions, edge_vectors, lengths*relative_thickness,
+      Colors(), objfile, ambient_color, diffuse_color, specular_color );
 }
 
 ///////////////////////////////////////////////////////////////////////////////

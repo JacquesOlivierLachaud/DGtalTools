@@ -674,12 +674,12 @@ int main( int argc, char** argv )
   const auto colormap_name    = vm[ "colormap" ].as<std::string>();
   const auto zt               = vm[ "zero-tic" ].as<double>();
   //auto params         = SH::defaultParameters();
-  params( "colormap", colormap_name )( "zero-tic", zt );
-  const auto colormapH = SH::getZeroTickedColorMap
+  // params( "colormap", colormap_name )( "zero-tic", zt );
+  const auto colormapH = SH::getColorMap
     ( minValue, maxValue, params );
-  const auto colormapG = SH::getZeroTickedColorMap
-    ( ( minValue < 0.0 ? -1.0 : 1.0 ) * minValue*minValue,
-      maxValue*maxValue, params );
+  const auto colormapG = SH::getColorMap
+    ( ( minValue < 0.0 ? -1.0 : 1.0 ) * 0.5 * minValue*minValue,
+      0.5 * maxValue*maxValue, params );
   
   trace.beginBlock( "Output mesh OBJ file" );
   auto output_basefile = vm[ "output"   ].as<std::string>();
@@ -715,6 +715,33 @@ int main( int argc, char** argv )
   trace.info() << "Gauss curvature: " << min_g << " <= G <= " << max_g << std::endl;
   okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colorsH );
   okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G", smesh, colorsG );
+  if ( zt > 0.0 )
+    {
+      auto edge_predicate_H = [&] ( SH::Idx e )
+	{
+	  auto faces = smesh.edgeFaces()[ e ];
+	  bool inf_zero = false;
+	  bool sup_zero = false;
+	  for ( auto f : faces )
+	    if ( measured_ball_mu1[ f ] < 0.0 ) inf_zero = true;
+	    else sup_zero = true;
+	  return inf_zero && sup_zero;
+	};
+      okw = SimpleMeshWriter::writeEdgeLinesOBJ
+	( output_basefile+"-H-zero", smesh, edge_predicate_H, zt );
+      auto edge_predicate_G = [&] ( SH::Idx e )
+	{
+	  auto faces = smesh.edgeFaces()[ e ];
+	  bool inf_zero = false;
+	  bool sup_zero = false;
+	  for ( auto f : faces )
+	    if ( measured_ball_mu2[ f ] < 0.0 ) inf_zero = true;
+	    else sup_zero = true;
+	  return inf_zero && sup_zero;
+	};
+      okw = SimpleMeshWriter::writeEdgeLinesOBJ
+	( output_basefile+"-G-zero", smesh, edge_predicate_G, zt );
+    }
   trace.endBlock();
 
       

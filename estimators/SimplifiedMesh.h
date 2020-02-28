@@ -388,6 +388,16 @@ namespace DGtal
                    const Color&           ambient_color  = Color( 32, 32, 32 ),
                    const Color&           diffuse_color  = Color( 200, 200, 255 ),
                    const Color&           specular_color = Color::White );
+
+    template <typename EdgePredicate>
+    static
+    bool writeEdgeLinesOBJ( std::string            objfile,
+			    const SimplifiedMesh & smesh,
+			    const EdgePredicate &  edge_predicate,
+			    const double           relative_thickness = 0.05,
+			    const Color&           ambient_color = Color::Black,
+			    const Color&           diffuse_color = Color::Black,
+			    const Color&           specular_color= Color::Black );
     
   };
 
