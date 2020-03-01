@@ -144,6 +144,14 @@ namespace DGtal
     /// vector to each vertex of the mesh. It simply averages the
     /// normals of every incident face.
     void computeVertexNormalsFromFaceNormals();
+
+    template <typename AnyRing>
+    std::vector<AnyRing> computeFaceValuesFromVertexValues
+    ( const std::vector<AnyRing>& vvalues ) const;
+    
+    template <typename AnyRing>
+    std::vector<AnyRing> computeVertexValuesFromFaceValues
+    ( const std::vector<AnyRing>& fvalues ) const;
     
     /// @}
 

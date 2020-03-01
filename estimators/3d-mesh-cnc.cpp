@@ -196,16 +196,16 @@ namespace DGtal {
   // 	       << " #NF=" << face_normal_map.size()
   // 	       << std::endl;
 
-// template <typename Scalar>
-// GradientColorMap<Scalar> 
-// getErrorColorMap( Scalar max )
-// {
-//   GradientColorMap<Scalar> gradcmap( 0.0, max );
-//   gradcmap.addColor( Color( 255, 255, 255 ) );
-//   gradcmap.addColor( Color( 255,   0,   0 ) );
-//   gradcmap.addColor( Color( 0,   0,   0 ) );
-//   return gradcmap;
-// }
+template <typename Scalar>
+GradientColorMap<Scalar> 
+getErrorColorMap( Scalar max )
+{
+  GradientColorMap<Scalar> gradcmap( 0.0, max );
+  gradcmap.addColor( Color( 255, 255, 255 ) );
+  gradcmap.addColor( Color( 255,   0,   0 ) );
+  gradcmap.addColor( Color( 0,   0,   0 ) );
+  return gradcmap;
+}
 
 // template <typename Colors>
 // Colors getSimplifiedColorMap( const Colors& colors, unsigned char lost_mask = 0x03 )
@@ -455,12 +455,12 @@ int main( int argc, char** argv )
   /////////////////////////////////////////////////////////////////////////////
   // Computing ground truth values if possible.
   /////////////////////////////////////////////////////////////////////////////
-  SH::Scalars       expected_values;
-  SH::Scalars       measured_values;
+  SH::Scalars       expected_G_values;
+  SH::Scalars       expected_H_values;
   SH::RealVectors   expected_normals;
   SH::RealVectors   measured_normals;
-  Statistic<double> stat_expected_curv;
-  Statistic<double> stat_measured_curv;
+  Statistic<double> stat_expected_G_curv;
+  Statistic<double> stat_expected_H_curv;
   double time_curv_ground_truth  = 0.0;
   double time_curv_estimations   = 0.0;
   double time_mu_estimations     = 0.0;
@@ -474,15 +474,20 @@ int main( int argc, char** argv )
   if ( polynomial )
     {
       trace.beginBlock( "Compute true curvatures" );
-      expected_values = ( ( quantity == "H" ) || ( quantity == "Mu1" )
-  			  || ( quantity == "HII" ) )
-  	? SHG::getMeanCurvatures    ( shape, K, surfels, params )
-  	: SHG::getGaussianCurvatures( shape, K, surfels, params );
-      stat_expected_curv.addValues( expected_values.cbegin(), expected_values.cend() );
-      stat_expected_curv.terminate();
-      trace.info() << "- truth curv: avg = " << stat_expected_curv.mean() << std::endl;
-      trace.info() << "- truth curv: min = " << stat_expected_curv.min() << std::endl;
-      trace.info() << "- truth curv: max = " << stat_expected_curv.max() << std::endl;
+      expected_H_values = SHG::getMeanCurvatures( shape, K, surfels, params );
+      expected_G_values = SHG::getGaussianCurvatures( shape, K, surfels, params );
+      stat_expected_H_curv.addValues( expected_H_values.cbegin(),
+				      expected_H_values.cend() );
+      stat_expected_G_curv.addValues( expected_G_values.cbegin(),
+				      expected_G_values.cend() );
+      stat_expected_H_curv.terminate();
+      stat_expected_G_curv.terminate();
+      trace.info() << "- truth min_H=" << stat_expected_H_curv.min()
+		   << " <= avg_H=" << stat_expected_H_curv.mean()
+		   << " <= max_H=" << stat_expected_H_curv.max() << std::endl;
+      trace.info() << "- truth min_G=" << stat_expected_G_curv.min()
+		   << " <= avg_G=" << stat_expected_G_curv.mean()
+		   << " <= max_G=" << stat_expected_G_curv.max() << std::endl;
       time_curv_ground_truth = trace.endBlock();
     }
 
@@ -634,7 +639,10 @@ int main( int argc, char** argv )
   trace.info() << smesh << std::endl;
   trace.endBlock();
 
-  trace.beginBlock( "Compute measures" );
+  /////////////////////////////////////////////////////////////////////////////
+  // Compute CNC local measures
+  /////////////////////////////////////////////////////////////////////////////
+  trace.beginBlock( "Compute CNC measures" );
   bool unit = vm.count( "unit-normals" );
   trace.info() << "Using " << ( unit ? "unit" : "regular" )
 	       << " interpolated normals." << std::endl;
@@ -648,7 +656,14 @@ int main( int argc, char** argv )
   trace.info() << "Total Gauss curvature G=" << G << std::endl;
   trace.endBlock();
 
-  trace.beginBlock( "Computes balls" );
+  /////////////////////////////////////////////////////////////////////////////
+  // Compute CNC measures within balls
+  /////////////////////////////////////////////////////////////////////////////
+  SH::Scalars       measured_G_values;
+  SH::Scalars       measured_H_values;
+  Statistic<double> stat_measured_G_curv;
+  Statistic<double> stat_measured_H_curv;
+  trace.beginBlock( "Computes CNC measures within balls" );
   // auto    quantity   = vm[ "quantity"   ].as<std::string>();
   const double mcoef = vm[ "m-coef"    ].as<double>();
   const double mpow  = vm[ "m-pow"     ].as<double>();
@@ -669,6 +684,10 @@ int main( int argc, char** argv )
     }
   trace.endBlock();
   
+  
+  /////////////////////////////////////////////////////////////////////////////
+  // Output mesh OBJ files
+  /////////////////////////////////////////////////////////////////////////////
   const auto minValue         = vm[ "minValue" ].as<double>();
   const auto maxValue         = vm[ "maxValue" ].as<double>();
   const auto colormap_name    = vm[ "colormap" ].as<std::string>();
@@ -680,7 +699,6 @@ int main( int argc, char** argv )
   const auto colormapG = SH::getColorMap
     ( ( minValue < 0.0 ? -1.0 : 1.0 ) * 0.5 * minValue*minValue,
       0.5 * maxValue*maxValue, params );
-  
   trace.beginBlock( "Output mesh OBJ file" );
   auto output_basefile = vm[ "output"   ].as<std::string>();
   auto output_objfile  = output_basefile + "-primal.obj";
@@ -692,27 +710,27 @@ int main( int argc, char** argv )
     return 2;
   }
   trace.info() << "Writing mean and Gaussian curvature OBJ files." << std::endl;
+  measured_H_values.resize( smesh.nbFaces() );
+  measured_G_values.resize( smesh.nbFaces() );
   auto colorsH = SH::Colors( smesh.nbFaces() );
   auto colorsG = SH::Colors( smesh.nbFaces() );
-  double min_h = measured_ball_mu1[ 0 ] / measured_ball_mu0[ 0 ];
-  double max_h = min_h;
-  double min_g = measured_ball_mu2[ 0 ] / measured_ball_mu0[ 0 ];
-  double max_g = min_g;
-  for ( SH::Idx i = 0; i < colorsH.size(); i++ )
+  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
     {
-      //trace.info() << i << " mu1=" << cnc.mu1[ i ] << " mu2=" << cnc.mu2[ i ];
-      double h =  measured_ball_mu1[ i ] / measured_ball_mu0[ i ];
-      double g =  measured_ball_mu2[ i ] / measured_ball_mu0[ i ];
-      min_h    = std::min( h, min_h );
-      max_h    = std::max( h, max_h );
-      min_g    = std::min( g, min_g );
-      max_g    = std::max( g, max_g );
-      //trace.info() << " h=" << h << " g=" << g << std::endl;
-      colorsH[ i ] = colormapH( h );
-      colorsG[ i ] = colormapG( g );
+      measured_H_values[ i ] = measured_ball_mu1[ i ] / measured_ball_mu0[ i ];
+      measured_G_values[ i ] = measured_ball_mu2[ i ] / measured_ball_mu0[ i ];
+      colorsH[ i ] = colormapH( measured_H_values[ i ] );
+      colorsG[ i ] = colormapG( measured_G_values[ i ] );
     }
-  trace.info() << "Mean  curvature: " << min_h << " <= H <= " << max_h << std::endl;
-  trace.info() << "Gauss curvature: " << min_g << " <= G <= " << max_g << std::endl;
+  stat_measured_H_curv.addValues( measured_H_values.cbegin(),
+				  measured_H_values.cend() );
+  stat_measured_G_curv.addValues( measured_G_values.cbegin(),
+				  measured_G_values.cend() );
+  trace.info() << "- estimated min_H=" << stat_measured_H_curv.min()
+	       << " <= avg_H=" << stat_measured_H_curv.mean()
+	       << " <= max_H=" << stat_measured_H_curv.max() << std::endl;
+  trace.info() << "- estimated min_G=" << stat_measured_G_curv.min()
+	       << " <= avg_G=" << stat_measured_G_curv.mean()
+	       << " <= max_G=" << stat_measured_G_curv.max() << std::endl;
   okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colorsH );
   okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G", smesh, colorsG );
   if ( zt > 0.0 )
@@ -743,7 +761,43 @@ int main( int argc, char** argv )
 	( output_basefile+"-G-zero", smesh, edge_predicate_G, zt );
     }
   trace.endBlock();
-
+  
+  /////////////////////////////////////////////////////////////////////////////
+  // Output mesh error OBJ files
+  /////////////////////////////////////////////////////////////////////////////
+  const auto max_error    = vm[ "max-error" ].as<double>();
+  if ( polynomial )
+    { // Error for mean curvature
+      auto exp_H = dual
+	? smesh.computeFaceValuesFromVertexValues( expected_H_values )
+	: expected_H_values;
+      const auto error_H_values = SHG::getScalarsAbsoluteDifference( measured_H_values,
+								     exp_H );
+      const auto stat_error   = SHG::getStatistic( error_H_values );
+      const auto error_cmap   = getErrorColorMap( max_error );
+      std::vector<Color> colorsHE( smesh.nbFaces() );
+      for ( SH::Idx i = 0; i < colorsHE.size(); i++ )
+	colorsHE[ i ] = error_cmap( error_H_values[ i ] ); 
+      okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H-error.obj",
+					smesh, colorsHE );
+      trace.info() << "|H-H_CNC|_oo = " << stat_error.max() << std::endl;
+    }
+  if ( polynomial )
+    { // Error for gaussian curvature
+      auto exp_G = dual
+	? smesh.computeFaceValuesFromVertexValues( expected_G_values )
+	: expected_G_values;
+      const auto error_G_values = SHG::getScalarsAbsoluteDifference( measured_G_values,
+								     exp_G );
+      const auto stat_error   = SHG::getStatistic( error_G_values );
+      const auto error_cmap   = getErrorColorMap( max_error );
+      std::vector<Color> colorsGE( smesh.nbFaces() );
+      for ( SH::Idx i = 0; i < colorsGE.size(); i++ )
+	colorsGE[ i ] = error_cmap( error_G_values[ i ] ); 
+      okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G-error.obj",
+					smesh, colorsGE );
+      trace.info() << "|G-G_CNC|_oo = " << stat_error.max() << std::endl;
+    }
       
 
   // const auto minValue         = vm[ "minValue" ].as<double>();

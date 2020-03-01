@@ -183,6 +183,44 @@ computeVertexNormalsFromFaceNormals()
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
+template <typename AnyRing>
+std::vector<AnyRing> 
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeFaceValuesFromVertexValues( const std::vector<AnyRing>& vvalues ) const
+{
+  ASSERT( vvalues.size() == nbVertices() );
+  std::vector<AnyRing> fvalues( nbFaces() );
+  Index f = 0;
+  for ( auto face : myIncidentVertices )
+    {
+      AnyRing n = NumberTraits<AnyRing>::ZERO;
+      for ( auto idx : face ) n += vvalues[ idx ];
+      fvalues[ f++ ] = n / face.size();
+    }
+  return fvalues;
+}
+    
+template <typename TRealPoint, typename TRealVector>
+template <typename AnyRing>
+std::vector<AnyRing> 
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeVertexValuesFromFaceValues( const std::vector<AnyRing>& fvalues ) const
+{
+  ASSERT( fvalues.size() == nbFaces() );
+  std::vector<AnyRing> vvalues( nbVertices() );
+  Index v = 0;
+  for ( auto vertex : myIncidentFaces )
+    {
+      AnyRing n = NumberTraits<AnyRing>::ZERO;
+      for ( auto idx : vertex ) n += fvalues[ idx ];
+      vvalues[ v++ ] = n / vertex.size();
+    }
+  return vvalues;
+}
+
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Edge 
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 makeEdge( Vertex i, Vertex j ) const
