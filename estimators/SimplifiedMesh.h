@@ -229,6 +229,14 @@ namespace DGtal
     /// @name Geometric services
     /// @{
 
+    /// @return the average of the length of edges.
+    Scalar averageEdgeLength() const;
+
+    /// Perturbate the positions with a uniform random noise of 'p *
+    /// averageEdgeLength' along arbitrary directions.
+    /// @param p any positive real value.
+    void perturbateWithUniformRandomNoise( Scalar p );
+    
     RealPoint faceCentroid( Index f ) const;
 
     WeightedFaces
@@ -294,7 +302,10 @@ namespace DGtal
     void computeNeighbors();
     /// Computes edge information.
     void computeEdges();
-    
+
+    /// @return a random number between 0.0 and 1.0
+    static Scalar rand01()
+    { return (Scalar) rand() / (Scalar) RAND_MAX; }
     
   }; // end of class SimplifiedMesh
 

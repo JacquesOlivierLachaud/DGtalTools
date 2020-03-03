@@ -233,6 +233,39 @@ makeEdge( Vertex i, Vertex j ) const
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalar
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+averageEdgeLength() const
+{
+  double      lengths = 0.0;
+  for ( Edge e = 0; e < nbEdges(); ++e )
+    {
+      auto vtcs = edgeVertices()[ e ];
+      const RealPoint  p  = myPositions[ vtcs.first  ];
+      const RealVector pq = myPositions[ vtcs.second ] - p;
+      lengths += pq.norm();
+    }
+  lengths /= nbEdges();
+  return lengths;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+perturbateWithUniformRandomNoise( Scalar p )
+{
+  for ( auto& x : myPositions )
+    {
+      RealVector d( rand01()*2.0 - 1.0, rand01()*2.0 - 1.0, rand01()*2.0 - 1.0 );
+      d = d.getNormalized();
+      Scalar l = rand01() * p;
+      x += l * d;
+    }
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::RealPoint
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 faceCentroid( Index f ) const
@@ -250,6 +283,11 @@ DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 computeFacesInclusionsInBall( Scalar r, Index f ) const
 {
   WeightedFaces result;
+  if ( r < 0.000001 )
+    {
+      result.push_back( std::make_pair( f, 0.000001 ) );
+      return result;
+    }
   RealPoint p = faceCentroid( f );
   std::set< Index > marked;
   std::queue< Index > active;

@@ -272,8 +272,8 @@ int main( int argc, char** argv )
     ( "average-normals,K", po::value<int>()->default_value( 0 ), "averages normals by performing <n> times vertexNormals -> faceNormals -> vertexNormals." )
     ( "unit-normals,u", "forces the interpolated normals to have unit norm." )
     ( "m-coef", po::value<double>()->default_value( 3.0 ), "the coefficient k that defines the radius of the ball used in measures, that is r := k h^b" )
-    ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" );
-  
+    ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" )
+    ( "uniform-noise", po::value<double>()->default_value( 0.0 ), "perturbates positions with a uniform random noise" );
   EH::optionsImplicitShape   ( general_opt );
   EH::optionsDigitizedShape  ( general_opt );
   general_opt.add_options()
@@ -300,7 +300,7 @@ int main( int argc, char** argv )
   //   ( "output,o", po::value<std::string>()->default_value( "none" ), "the basename for output obj files or none if no output obj is wanted." );
   general_opt.add_options()
     ( "digital-surface", po::value<std::string>()->default_value( "DUAL" ), "chooses which kind of digital surface is used for computations in DUAL|PRIMAL|PDUAL|PPRIMAL: DUAL dual marching-cubes surface, PRIMAL blocky quad primal surface, PDUAL same as DUAL but projected onto polynomial true surface (if possible), PPRIMAL same as PRIMAL but projected onto polynomial true surface (if possible).");
-
+  
 
   /////////////////////////////////////////////////////////////////////////////
   // parse command line ----------------------------------------------
@@ -550,6 +550,7 @@ int main( int argc, char** argv )
     }
   trace.endBlock();
 
+  
   /////////////////////////////////////////////////////////////////////////////
   // Compute true and/or estimated normal vectors
   /////////////////////////////////////////////////////////////////////////////
@@ -615,6 +616,13 @@ int main( int argc, char** argv )
   trace.info() << smesh << std::endl;
   trace.endBlock();
 
+  /////////////////////////////////////////////////////////////////////////////
+  // Perturbates positions
+  /////////////////////////////////////////////////////////////////////////////
+  auto uniform_noise = vm[ "uniform-noise" ].as<double>();  
+  if ( uniform_noise > 0.0 )
+    smesh.perturbateWithUniformRandomNoise( uniform_noise );
+  
   /////////////////////////////////////////////////////////////////////////////
   // Compute normals
   /////////////////////////////////////////////////////////////////////////////
@@ -716,8 +724,12 @@ int main( int argc, char** argv )
   auto colorsG = SH::Colors( smesh.nbFaces() );
   for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
     {
-      measured_H_values[ i ] = measured_ball_mu1[ i ] / measured_ball_mu0[ i ];
-      measured_G_values[ i ] = measured_ball_mu2[ i ] / measured_ball_mu0[ i ];
+      measured_H_values[ i ] = measured_ball_mu0[ i ] != 0
+	? measured_ball_mu1[ i ] / measured_ball_mu0[ i ]
+	: 0.0;
+      measured_G_values[ i ] = measured_ball_mu0[ i ] != 0
+	? measured_ball_mu2[ i ] / measured_ball_mu0[ i ]
+	: 0.0;
       colorsH[ i ] = colormapH( measured_H_values[ i ] );
       colorsG[ i ] = colormapG( measured_G_values[ i ] );
     }
