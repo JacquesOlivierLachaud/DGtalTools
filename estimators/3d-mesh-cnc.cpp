@@ -660,7 +660,12 @@ int main( int argc, char** argv )
   CNCComputer cnc( smesh );
   cnc.computeInterpolatedMeasures( CNCComputer::Measure::ALL_MU, unit );
   double G = 0.0;
-  for ( auto g : cnc.mu2 ) G += g;
+  int nb_nan = 0;
+  for ( auto g : cnc.mu2 ) {
+    if ( ! isnan( g ) ) G += g;
+    else nb_nan++;
+  }
+  trace.info() << nb_nan << " / " << cnc.mu2.size() << " NaN" << std::endl;
   trace.info() << "Total Gauss curvature G=" << G << std::endl;
   trace.endBlock();
 

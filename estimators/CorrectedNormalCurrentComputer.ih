@@ -143,7 +143,16 @@ computeInterpolatedMu2( bool unit_u )
           p[ idx_v ] = myMesh.positions()    [ f[ idx_v ] ];
           u[ idx_v ] = myMesh.vertexNormals()[ f[ idx_v ] ];
         }
-      mu2[ idx_f++ ] = Formula::mu2InterpolatedU( p, u, unit_u );
+      mu2[ idx_f ] = Formula::mu2InterpolatedU( p, u, unit_u );
+      // if ( isnan( mu2[ idx_f ] ) )
+      //   {
+      //     trace.warning() << "At face " << idx_f
+      //                     << ", with " << f.size() << " inc. vtx,"
+      //                     << " mu2 not a number." << std::endl;
+      //     for ( auto x : p ) trace.warning() << "x=" << x << std::endl;
+      //     for ( auto n : u ) trace.warning() << "n=" << n << std::endl;
+      //   }
+      idx_f++;
     }
   return true;
 }

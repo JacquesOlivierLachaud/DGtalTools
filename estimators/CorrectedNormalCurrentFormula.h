@@ -140,7 +140,11 @@ namespace DGtal
       // MU0=1/2*det( uM, B-A, C-A )
       //    =  1/2 < ( (u_A + u_B + u_C)/3.0 ) | (AB x AC ) >
       RealVector uM = ( ua+ub+uc ) / 3.0;
-      if ( unit_u ) uM /= uM.norm();
+      if ( unit_u )
+        {
+          auto uM_norm = uM.norm();
+          uM = uM_norm == 0.0 ? uM : uM / uM_norm;
+        }
       return 0.5 * ( b - a ).crossProduct( c - a ).dot( uM );
     }
     
@@ -491,7 +495,8 @@ namespace DGtal
     {
       RealVector avg;
       for ( auto v : vecs ) avg += v;
-      return avg.getNormalized();
+      auto avg_norm = avg.norm();
+      return avg_norm != 0.0 ? avg / avg_norm : avg;
     }
 
     /// @}
