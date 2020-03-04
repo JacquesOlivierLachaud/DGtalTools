@@ -729,12 +729,16 @@ int main( int argc, char** argv )
   auto colorsG = SH::Colors( smesh.nbFaces() );
   for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
     {
+      if ( isnan( measured_ball_mu0[ i ] ) )
+        trace.warning() << "At face " << i << " mu0 is NaN." << std::endl;
       measured_H_values[ i ] = measured_ball_mu0[ i ] != 0
 	? measured_ball_mu1[ i ] / measured_ball_mu0[ i ]
 	: 0.0;
       measured_G_values[ i ] = measured_ball_mu0[ i ] != 0
 	? measured_ball_mu2[ i ] / measured_ball_mu0[ i ]
 	: 0.0;
+      // trace.info() << i << " " << measured_H_values[ i ]
+      //              << " " << measured_G_values[ i ] << std::endl;
       colorsH[ i ] = colormapH( measured_H_values[ i ] );
       colorsG[ i ] = colormapG( measured_G_values[ i ] );
     }
