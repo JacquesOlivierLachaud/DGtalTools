@@ -144,6 +144,12 @@ namespace DGtal
     /// vector to each vertex of the mesh. It simply averages the
     /// normals of every incident face.
     void computeVertexNormalsFromFaceNormals();
+    
+    /// Uses the normals associated with faces to compute a normal
+    /// vector to each vertex of the mesh. It uses the weights
+    /// proposed by [Max, 1999] for combining face information into
+    /// vertex information.
+    void computeVertexNormalsFromFaceNormalsWithMaxWeights();
 
     template <typename AnyRing>
     std::vector<AnyRing> computeFaceValuesFromVertexValues
@@ -236,9 +242,20 @@ namespace DGtal
     /// averageEdgeLength' along arbitrary directions.
     /// @param p any positive real value.
     void perturbateWithUniformRandomNoise( Scalar p );
-    
+
+    /// @param f any valid face index.
+    /// @return the centroid (or barycenter) of face \a f.
     RealPoint faceCentroid( Index f ) const;
 
+    /// @param f any valid face index.
+    /// @return the area of face \a f.
+    Scalar faceArea( Index f ) const;
+
+    /// @param v any valid vertex index.
+    /// @return the Max's weights for each incident face to \a v, in the same order as `myIncidentFaces[ v ]`.
+    /// @note Used in computeVertexNormalsFromFaceNormalsWithMaxWeights
+    Scalars getMaxWeights( Index v ) const;
+    
     WeightedFaces
     computeFacesInclusionsInBall( Scalar r, Index f ) const;
     

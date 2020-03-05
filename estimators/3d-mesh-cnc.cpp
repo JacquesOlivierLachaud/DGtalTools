@@ -630,19 +630,19 @@ int main( int argc, char** argv )
   if ( smesh.faceNormals().empty() && smesh.vertexNormals().empty() )
     {
       smesh.computeFaceNormalsFromPositions();
-      smesh.computeVertexNormalsFromFaceNormals();
+      smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
     }
   else if ( smesh.faceNormals().empty() )
     smesh.computeFaceNormalsFromVertexNormals();
   else if ( smesh.vertexNormals().empty() )
-    smesh.computeVertexNormalsFromFaceNormals();
+    smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
   auto nb_avg_normals = vm[ "average-normals"   ].as<int>();
   for ( int i = 0; i < nb_avg_normals; i++ )
     {
       trace.info() << "face normals -> vertex normals" << std::endl;
       smesh.computeFaceNormalsFromVertexNormals();
       trace.info() << "vertex normals -> face normals" << std::endl;
-      smesh.computeVertexNormalsFromFaceNormals();
+      smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
     }
   trace.info() << smesh << std::endl;
   trace.endBlock();

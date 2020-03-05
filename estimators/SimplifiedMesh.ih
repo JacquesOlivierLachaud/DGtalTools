@@ -186,6 +186,61 @@ computeVertexNormalsFromFaceNormals()
       v++;
     }
 }
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeVertexNormalsFromFaceNormalsWithMaxWeights()
+{
+  if ( myFaceNormals.empty() ) return;
+  myVertexNormals.resize( myIncidentFaces.size() );
+  Index v = 0;
+  for ( auto incident_faces : myIncidentFaces )
+    {
+      RealVector n; // normal
+      const auto weights = getMaxWeights( v );
+      Index i = 0;
+      for ( auto idx_f : incident_faces ) n += weights[ i++ ] * myFaceNormals[ idx_f ];
+      auto n_norm = n.norm();
+      myVertexNormals[ v ] = n_norm != 0.0 ? n / n_norm : n;
+      v++;
+    }
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalars
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+getMaxWeights( Index v ) const
+{
+  Scalars        weights;
+  const auto & neighbors = myNeighborVertices[ v ];
+  const RealPoint      x = myPositions[ v ]; 
+  for ( auto idx_f : myIncidentFaces[ v ] )
+    {
+      // Find adjacent vertices to v
+      std::vector< Index > adj_vertices;
+      for ( auto idx_v : myIncidentVertices[ idx_f ] )
+        {
+          auto it = std::find( neighbors.cbegin(), neighbors.cend(), idx_v );
+          if ( it != neighbors.cend() ) adj_vertices.push_back( *it );
+        }
+      if ( adj_vertices.size() != 2 )
+        trace.warning() << "[SimplifiedMesh::getMaxWeights] "
+                        << adj_vertices.size() << " adjacent vertices to vertex "
+                        << v << " on face" << idx_f << "." << std::endl;
+      if (adj_vertices.size() >= 2 )
+        {
+          const Scalar area = faceArea( idx_f );
+          const Scalar   l1 = ( myPositions[ adj_vertices[ 0 ] ] - x ).squaredNorm();
+          const Scalar   l2 = ( myPositions[ adj_vertices[ 1 ] ] - x ).squaredNorm();
+          const Scalar l1l2 = l1 * l2;
+          weights.push_back( l1l2 != 0 ? fabs( area ) / l1l2 : 0.0 );
+        }
+      else weights.push_back( 0.0 );
+    }
+  return weights;
+}
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
@@ -280,6 +335,22 @@ faceCentroid( Index f ) const
   for ( auto v : myIncidentVertices[ f ] )
     c += myPositions[ v ];
   return c / myIncidentVertices[ f ].size();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalar
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+faceArea( Index f ) const
+{
+  Scalar area = 0.0;
+  const auto & inc_vtcs = myIncidentVertices[ f ];
+  RealPoint p = myPositions[ inc_vtcs.back() ];
+  const Index m = inc_vtcs.size() - 2;
+  for ( Index i = 0; i < m; ++i )
+    area += ( myPositions[ inc_vtcs[ i ] ] - p )
+      .crossProduct( myPositions[ inc_vtcs[ i+1 ] ] - p ).norm();
+  return area / 2.0;
 }
 
 //-----------------------------------------------------------------------------
