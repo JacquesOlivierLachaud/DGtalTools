@@ -327,6 +327,30 @@ perturbateWithUniformRandomNoise( Scalar p )
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
+void
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+perturbateWithAdaptiveUniformRandomNoise( Scalar p )
+{
+  Scalars local_average_lengths( nbVertices() );
+  for ( Index v = 0; v < nbVertices(); ++v )
+    {
+      const RealPoint x = myPositions[ v ];
+      Scalar local_length = 0.0;
+      for ( auto nv : myNeighborVertices[ v ] )
+	local_length += ( myPositions[ nv ] - x ).norm();
+      local_average_lengths[ v ] = local_length / myNeighborVertices[ v ].size();
+    }
+  for ( Index v = 0; v < nbVertices(); ++v )
+    {
+      RealVector d( rand01()*2.0 - 1.0, rand01()*2.0 - 1.0, rand01()*2.0 - 1.0 );
+      d = d.getNormalized();
+      Scalar l = rand01() * p * local_average_lengths[ v ];
+      myPositions[ v ] += l * d;
+    }
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::RealPoint
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 faceCentroid( Index f ) const

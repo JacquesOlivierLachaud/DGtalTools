@@ -273,7 +273,8 @@ int main( int argc, char** argv )
     ( "unit-normals,u", "forces the interpolated normals to have unit norm." )
     ( "m-coef", po::value<double>()->default_value( 3.0 ), "the coefficient k that defines the radius of the ball used in measures, that is r := k h^b" )
     ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" )
-    ( "uniform-noise", po::value<double>()->default_value( 0.0 ), "perturbates positions with a uniform random noise" );
+    ( "uniform-noise", po::value<double>()->default_value( 0.0 ), "perturbates positions with a uniform random noise as a ratio r of average edge length." )
+    ( "adaptive-noise", po::value<double>()->default_value( 0.0 ), "perturbates positions with a uniform random noise as a ratio r of local average edge length." );
   EH::optionsImplicitShape   ( general_opt );
   EH::optionsDigitizedShape  ( general_opt );
   general_opt.add_options()
@@ -619,9 +620,15 @@ int main( int argc, char** argv )
   /////////////////////////////////////////////////////////////////////////////
   // Perturbates positions
   /////////////////////////////////////////////////////////////////////////////
-  auto uniform_noise = vm[ "uniform-noise" ].as<double>();  
+  auto uniform_noise  = vm[ "uniform-noise" ].as<double>();  
+  auto adaptive_noise = vm[ "adaptive-noise" ].as<double>();  
   if ( uniform_noise > 0.0 )
-    smesh.perturbateWithUniformRandomNoise( uniform_noise );
+    {
+      const auto eps = uniform_noise * smesh.averageEdgeLength();
+      smesh.perturbateWithUniformRandomNoise( eps );
+    }
+  if ( adaptive_noise > 0.0 )
+    smesh.perturbateWithAdaptiveUniformRandomNoise( adaptive_noise );
   
   /////////////////////////////////////////////////////////////////////////////
   // Compute normals

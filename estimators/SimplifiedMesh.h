@@ -242,6 +242,7 @@ namespace DGtal
     /// averageEdgeLength' along arbitrary directions.
     /// @param p any positive real value.
     void perturbateWithUniformRandomNoise( Scalar p );
+    void perturbateWithAdaptiveUniformRandomNoise( Scalar p );
 
     /// @param f any valid face index.
     /// @return the centroid (or barycenter) of face \a f.
