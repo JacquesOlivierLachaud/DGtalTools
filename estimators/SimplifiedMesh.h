@@ -438,6 +438,42 @@ namespace DGtal
     
   };
 
+
+  /////////////////////////////////////////////////////////////////////////////
+  // template class SimplifiedMeshHelper
+  /**
+     Description of template class 'SimplifiedMeshHelper' <p> \brief Aim:
+     An helper class for building classical meshes.
+
+     @tparam TRealPoint an arbitrary model of RealPoint.
+     @tparam TRealVector an arbitrary model of RealVector.
+   */
+  template < typename TRealPoint, typename TRealVector >
+  struct SimplifiedMeshHelper
+  {
+    typedef TRealPoint                              RealPoint;
+    typedef TRealVector                             RealVector;
+    typedef SimplifiedMeshHelper< RealPoint, RealVector > Self;
+    static const Dimension dimension = RealPoint::dimension;
+    BOOST_STATIC_ASSERT( ( dimension == 3 ) );
+
+    typedef DGtal::SimplifiedMesh< RealPoint, RealVector > SimplifiedMesh;
+    typedef typename RealVector::Component          Scalar;
+    typedef std::vector<Scalar>                     Scalars;
+    typedef typename SimplifiedMesh::Size           Size;
+    typedef typename SimplifiedMesh::Index          Index;
+    typedef typename SimplifiedMesh::Vertices       Vertices;
+    typedef typename SimplifiedMesh::Faces          Faces;
+
+    enum class Normals { NO_NORMALS, VERTEX_NORMALS, FACE_NORMALS };
+    SimplifiedMesh makeSphere( Scalar radius, RealPoint center,
+			       int nb_latitudes, int nb_longitudes, Normals normals );
+    Scalars sphereMeanCurvature( Scalar radius, 
+				 int nb_latitudes, int nb_longitudes );
+    Scalars sphereGaussCurvature( Scalar radius, 
+				  int nb_latitudes, int nb_longitudes );
+  };
+  
 } // namespace DGtal
 
 ///////////////////////////////////////////////////////////////////////////////

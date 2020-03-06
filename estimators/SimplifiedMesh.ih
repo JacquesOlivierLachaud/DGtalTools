@@ -841,5 +841,44 @@ writeEdgeLinesOBJ( std::string            objfile,
       Colors(), objfile, ambient_color, diffuse_color, specular_color );
 }
 
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::SimplifiedMesh 
+DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
+makeSphere( Scalar radius, RealPoint center,
+	    int n, int m, Normals normals )
+{
+  n = std::max( n, 1 ); // nb latitudes (except poles)
+  m = std::max( m, 3 ); // nb longitudes
+  std::vector<RealPoint> p;                  // positions
+  std::vector< std::vector< Index > > faces; // faces = ( incident vertices )
+  // vertices are numbered as follows
+  //         0        : bottom pole
+  //         1 --    m: first row
+  //       m+1 --  2*m: second row
+  // ...
+  // (n-1)*m+1 --  n*m: before last row
+  //     n*m+1        : top pole    
+  const Size nbv = 2 + ( n - 2 ) * m;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars 
+DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
+Scalars sphereMeanCurvature( Scalar radius, 
+			     int n, int m )
+{
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars 
+DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
+sphereGaussCurvature( Scalar radius, 
+		      int n, int m )
+{
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
