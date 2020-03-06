@@ -247,6 +247,7 @@ int main( int argc, char** argv )
   typedef SimplifiedMesh<RealPoint,RealVector>  SimpleMesh;
   typedef SimplifiedMeshReader<RealPoint,RealVector> SimpleMeshReader;
   typedef SimplifiedMeshWriter<RealPoint,RealVector> SimpleMeshWriter;
+  typedef SimplifiedMeshHelper<RealPoint,RealVector> SimpleMeshHelper;
   typedef SimpleMesh::Index                     Index;
   typedef Shortcuts<KSpace>                     SH;
   typedef ShortcutsGeometry<KSpace>             SHG;
@@ -268,9 +269,11 @@ int main( int argc, char** argv )
   general_opt.add_options()
     ( "help,h", "display this message" )
     ( "input,i", po::value<std::string>(), "input file: may be a mesh (.OBJ) or a volume image (.vol)" )
+    ( "mesh", po::value<std::string>(), "input predefined mesh: sphere[-VN|-FN],r,m,n where m/n is the number of latitudes/longitudes" )
     ( "output,o", po::value<std::string>()->default_value( "cnc" ), "the basename for output obj files or <none> if no output obj is wanted." )
     ( "average-normals,K", po::value<int>()->default_value( 0 ), "averages normals by performing <n> times vertexNormals -> faceNormals -> vertexNormals." )
     ( "unit-normals,u", "forces the interpolated normals to have unit norm." )
+    ( "weights-normals-f2v", po::value<std::string>()->default_value( "EQUAL" ), "specifies how to average face normals when estimating vertex normals: EQUAL|MAX1995" )
     ( "m-coef", po::value<double>()->default_value( 3.0 ), "the coefficient k that defines the radius of the ball used in measures, that is r := k h^b" )
     ( "m-pow", po::value<double>()->default_value( 0.5 ), "the coefficient b that defines the radius of the ball used in measures, that is r := k h^b" )
     ( "uniform-noise", po::value<double>()->default_value( 0.0 ), "perturbates positions with a uniform random noise as a ratio r of average edge length." )
@@ -320,12 +323,14 @@ int main( int argc, char** argv )
       return 0;
     }
 
+  auto mesh     = vm.count( "mesh"  ) ? vm[ "mesh"  ].as<string>() : "";
   auto filename = vm.count( "input" ) ? vm[ "input" ].as<string>() : "";
   auto idx = filename.rfind('.');
   std::string extension = (idx != std::string::npos) ? filename.substr(idx+1) : "";
   trace.info() << "filename=" << filename << " extension=" << extension << std::endl;
-  if (parseOK && ( ! vm.count("polynomial") ) && ( ! vm.count( "input" ) ) ) {
-    missingParam("--polynomial or --input");
+  if ( parseOK && ( ! vm.count("polynomial") ) && ( ! vm.count( "input" ) )
+       && ( ! vm.count( "mesh" ) ) ) {
+    missingParam("--polynomial or --input or --mesh");
     neededArgsGiven = false;
   }
   if ( vm.count( "input" ) && ( extension != "vol" )
@@ -333,6 +338,15 @@ int main( int argc, char** argv )
     missingParam("Wrong input file extension (should be .vol, .obj, .OBJ)");
     neededArgsGiven = false;
   }
+
+  auto meshargs = SimpleMeshReader::split( mesh, ',' );
+  auto meshname = mesh != "" ? meshargs[ 0 ] : "";
+  if ( meshname != ""
+       && meshname != "sphere" && meshname != "sphere-VN" && meshname != "sphere-FN" ) 
+    {
+      missingParam("Wrong predefined mesh (should be sphere[-VN|-FN])");
+      neededArgsGiven = false;
+    }
   
   if ( !neededArgsGiven || !parseOK || vm.count("help") || argc <= 1 )
     {
@@ -341,6 +355,7 @@ int main( int argc, char** argv )
                   << "Basic usage: "<<std::endl
 		  << "\t 3d-mesh-fcnc -i mesh.obj" << std::endl
 		  << "\t 3d-mesh-fcnc -i image.vol" << std::endl
+		  << "\t 3d-mesh-fcnc --mesh sphere,2.5,5,8" << std::endl
 		  << "\t 3d-mesh-fcnc -p goursat" << std::endl
 		  << "\t 3d-mesh-fcnc -p \"5*x^2-3*x*y*z+2*y^2-z^2-4*x*y^2\""
 		  << std::endl << std::endl;
@@ -366,7 +381,8 @@ int main( int argc, char** argv )
   bool polynomial = false;
   bool volfile    = false;
   bool meshfile   = false;
-
+  bool makemesh   = false;
+  
   /////////////////////////////////////////////////////////////////////////////
   // Taking care of vol image file or implicit polynomial
   KSpace                        K;   // Digital space.
@@ -585,8 +601,32 @@ int main( int argc, char** argv )
   // Build simplified mesh
   /////////////////////////////////////////////////////////////////////////////
   trace.beginBlock( "Build simplified mesh" );
-  if ( vm.count( "input" ) && ( ( extension == "obj" )
-				|| ( extension == "OBJ" ) ) )
+  if ( mesh != "" && meshname == "sphere" && meshargs.size() >= 4 )
+    {
+      smesh = SimpleMeshHelper
+        ::makeSphere( std::stof( meshargs[1] ), RealPoint(),
+                      std::stoi( meshargs[2] ), std::stoi( meshargs[3] ),
+                      SimpleMeshHelper::Normals::NO_NORMALS );
+      makemesh = true;
+    }
+  else if ( mesh != "" && meshname == "sphere-VN" && meshargs.size() >= 4 )
+    {
+      smesh = SimpleMeshHelper
+        ::makeSphere( std::stof( meshargs[1] ), RealPoint(),
+                      std::stoi( meshargs[2] ), std::stoi( meshargs[3] ),
+                      SimpleMeshHelper::Normals::VERTEX_NORMALS );
+      makemesh = true;
+    }
+  else if ( mesh != "" && meshname == "sphere-FN" && meshargs.size() >= 4 )
+    {
+      smesh = SimpleMeshHelper
+        ::makeSphere( std::stof( meshargs[1] ), RealPoint(),
+                      std::stoi( meshargs[2] ), std::stoi( meshargs[3] ),
+                      SimpleMeshHelper::Normals::FACE_NORMALS );
+      makemesh = true;
+    }
+  else if ( vm.count( "input" ) && ( ( extension == "obj" )
+                                     || ( extension == "OBJ" ) ) )
     {
       // Case where input is a mesh obj file.
       trace.beginBlock( "Reading input obj mesh file" );
@@ -634,22 +674,34 @@ int main( int argc, char** argv )
   // Compute normals
   /////////////////////////////////////////////////////////////////////////////
   trace.beginBlock( "Compute normals if necessary" );
+  auto weights_normals_f2v = vm[ "weights-normals-f2v" ].as<std::string>();
   if ( smesh.faceNormals().empty() && smesh.vertexNormals().empty() )
     {
       smesh.computeFaceNormalsFromPositions();
-      smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+      if ( weights_normals_f2v == "MAX1995" )
+        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+      else
+        smesh.computeVertexNormalsFromFaceNormals();
     }
   else if ( smesh.faceNormals().empty() )
     smesh.computeFaceNormalsFromVertexNormals();
   else if ( smesh.vertexNormals().empty() )
-    smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+    {
+      if ( weights_normals_f2v == "MAX1995" )
+        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+      else
+        smesh.computeVertexNormalsFromFaceNormals();
+    }
   auto nb_avg_normals = vm[ "average-normals"   ].as<int>();
   for ( int i = 0; i < nb_avg_normals; i++ )
     {
       trace.info() << "face normals -> vertex normals" << std::endl;
       smesh.computeFaceNormalsFromVertexNormals();
       trace.info() << "vertex normals -> face normals" << std::endl;
-      smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+      if ( weights_normals_f2v == "MAX1995" )
+        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+      else
+        smesh.computeVertexNormalsFromFaceNormals();
     }
   trace.info() << smesh << std::endl;
   trace.endBlock();

@@ -226,9 +226,13 @@ getMaxWeights( Index v ) const
           if ( it != neighbors.cend() ) adj_vertices.push_back( *it );
         }
       if ( adj_vertices.size() != 2 )
-        trace.warning() << "[SimplifiedMesh::getMaxWeights] "
-                        << adj_vertices.size() << " adjacent vertices to vertex "
-                        << v << " on face" << idx_f << "." << std::endl;
+        {
+          trace.warning() << "[SimplifiedMesh::getMaxWeights] "
+                          << adj_vertices.size() << " adjacent vertices to vertex "
+                          << v << " on face" << idx_f << "." << std::endl;
+          for ( auto a : adj_vertices ) std::cerr << " " << a;
+          std::cerr << std::endl;
+        }
       if (adj_vertices.size() >= 2 )
         {
           const Scalar area = faceArea( idx_f );
@@ -487,36 +491,63 @@ computeNeighbors()
 {
   myNeighborFaces   .resize( nbFaces() );
   myNeighborVertices.resize( nbVertices() );
+  std::vector< std::set< Index > > tmp( nbVertices() );
+  // For each vertex, computes its neighboring vertices
+  for ( auto incident_vertices : incidentVertices() )
+    {
+      const Size nb_iv = incident_vertices.size();
+      for ( Size k = 0; k < nb_iv; ++k )
+        {
+          tmp[ incident_vertices[ k           ] ].insert( incident_vertices[ (k+1)%nb_iv ] );
+          tmp[ incident_vertices[ (k+1)%nb_iv ] ].insert( incident_vertices[ k           ] );
+        }
+    }
+  // For each vertex, computes its neighboring vertices
+  for ( Index idx_v = 0; idx_v < nbVertices(); ++idx_v )
+    myNeighborVertices[ idx_v ] = Vertices( tmp[ idx_v ].cbegin(), tmp[ idx_v ].cend() );
+  
   // For each face, computes its neighboring faces
   Index idx_f = 0;
   for ( auto incident_vertices : incidentVertices() )
     {
       std::set< Index > neighbor_faces_set;
+      std::sort( incident_vertices.begin(), incident_vertices.end() );
       for ( auto idx_v : incident_vertices )
 	{
 	  const auto & incident_faces = incidentFaces()[ idx_v ];
-	  neighbor_faces_set.insert( incident_faces.begin(), incident_faces.end() );
+          for ( auto inc_f : incident_faces )
+            {
+              // Keep only faces incident to two vertices of f.
+              auto incident_vertices2 = incidentVertices()[ inc_f ];
+              std::sort( incident_vertices2.begin(), incident_vertices2.end() );
+              Vertices common;
+              std::set_intersection( incident_vertices.cbegin(),  incident_vertices.cend(),
+                                     incident_vertices2.cbegin(), incident_vertices2.cend(),
+                                     std::back_inserter( common ) );
+              if ( common.size() == 2 )
+                neighbor_faces_set.insert( inc_f );
+            }
 	}
       neighbor_faces_set.erase( idx_f );
       Faces neighbor_faces( neighbor_faces_set.begin(), neighbor_faces_set.end() );
       myNeighborFaces[ idx_f++ ] = neighbor_faces;
     }
-  // For each vertex, computes its neighboring vertices
-  Index idx_v = 0;
-  for ( auto incident_faces : incidentFaces() )
-    {
-      std::set< Index > neighbor_vertices_set;
-      for ( auto idx_f : incident_faces )
-	{
-	  const auto & incident_vertices = incidentVertices()[ idx_f ];
-	  neighbor_vertices_set.insert( incident_vertices.begin(),
-					incident_vertices.end() );
-	}
-      neighbor_vertices_set.erase( idx_v );
-      Vertices neighbor_vertices( neighbor_vertices_set.begin(),
-				  neighbor_vertices_set.end() );
-      myNeighborVertices[ idx_v++ ] = neighbor_vertices;
-    }
+  // // For each vertex, computes its neighboring vertices
+  // Index idx_v = 0;
+  // for ( auto incident_faces : incidentFaces() )
+  //   {
+  //     std::set< Index > neighbor_vertices_set;
+  //     for ( auto idx_f : incident_faces )
+  //       {
+  //         const auto & incident_vertices = incidentVertices()[ idx_f ];
+  //         neighbor_vertices_set.insert( incident_vertices.begin(),
+  //       				incident_vertices.end() );
+  //       }
+  //     neighbor_vertices_set.erase( idx_v );
+  //     Vertices neighbor_vertices( neighbor_vertices_set.begin(),
+  //       			  neighbor_vertices_set.end() );
+  //     myNeighborVertices[ idx_v++ ] = neighbor_vertices;
+  //   }
 }
 
 //-----------------------------------------------------------------------------
@@ -846,12 +877,10 @@ template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::SimplifiedMesh 
 DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
 makeSphere( Scalar radius, RealPoint center,
-	    int n, int m, Normals normals )
+	    Size m, Size n, Normals normals )
 {
-  n = std::max( n, 1 ); // nb latitudes (except poles)
-  m = std::max( m, 3 ); // nb longitudes
-  std::vector<RealPoint> p;                  // positions
-  std::vector< std::vector< Index > > faces; // faces = ( incident vertices )
+  m = std::max( m, (Size)1 ); // nb latitudes (except poles)
+  n = std::max( n, (Size)3 ); // nb longitudes
   // vertices are numbered as follows
   //         0        : bottom pole
   //         1 --    m: first row
@@ -859,25 +888,85 @@ makeSphere( Scalar radius, RealPoint center,
   // ...
   // (n-1)*m+1 --  n*m: before last row
   //     n*m+1        : top pole    
-  const Size nbv = 2 + ( n - 2 ) * m;
+  const Size nbv = 2 + n * m;
+  std::vector< RealPoint > p( nbv );         // positions
+  std::vector< std::vector< Size > > faces; // faces = ( incident vertices )
+  p[     0 ] = center + radius * RealPoint( 0.0, 0.0, -1.0 );
+  p[ m*n+1 ] = center + radius * RealPoint( 0.0, 0.0,  1.0 );
+  const auto fv = [n] (Size i, Size j) { return i * n + j + (Size)1; };
+  for ( Size i = 0; i < m; ++i )
+    for ( Size j = 0; j < n; ++j )
+      {
+        const Scalar theta = ( 2.0 * M_PI * (double) j ) / (double) n;
+        const Scalar   phi = ( M_PI * (double) (i+1) ) / (double) (m+1) - 0.5 * M_PI;
+        p[ fv( i, j ) ] = center + radius * RealPoint( cos( theta ) * cos( phi ),
+                                                       sin( theta ) * cos( phi ),
+                                                       sin( phi ) );
+        // trace.info() << fv( i, j ) << "=(" << i << "," << j << ")"
+        //              << " " << p[ fv( i, j ) ] << std::endl;
+      }
+  for ( Size j = 0; j < n; ++j )
+    faces.push_back( std::vector< Size > { 0u, fv( 0, (j+1) % n ), fv( 0, j ) } ); 
+  for ( Size i = 0; i < m-1; ++i )
+    for ( Size j = 0; j < n; ++j )
+      faces.push_back( std::vector< Size >
+                       { fv( i, j ), fv( i, (j+1) % n ), fv( i+1, (j+1) % n ), fv( i+1, j ) } );
+  for ( Size j = 0; j < n; ++j )
+    faces.push_back( std::vector< Size > { fv( m-1, j ), fv( m-1, (j+1) % n ), m*n+(Size)1 } );
+  SimplifiedMesh smesh( p.cbegin(), p.cend(), faces.cbegin(), faces.cend() );
+  if ( normals == Normals::VERTEX_NORMALS )
+    {
+      std::vector< RealVector > vnormals( nbv );
+      for ( Size k = 0; k < nbv; ++k )
+        vnormals[ k ] = ( p[ k ] - center ).getNormalized();
+      smesh.setVertexNormals( vnormals.cbegin(), vnormals.cend() );
+    }
+  else if ( normals == Normals::FACE_NORMALS )
+    {
+      std::vector< RealVector > fnormals( smesh.nbFaces() );
+      for ( Size k = 0; k < fnormals.size(); ++k )
+        fnormals[ k ] = ( smesh.faceCentroid( k ) - center ).getNormalized();
+      smesh.setFaceNormals( fnormals.cbegin(), fnormals.cend() );
+    }
+  return smesh;
 }
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars 
 DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
-Scalars sphereMeanCurvature( Scalar radius, 
-			     int n, int m )
+sphereMeanCurvature( Scalar radius, Size m, Size n )
 {
+  n = std::max( n, (Size)1 ); // nb latitudes (except poles)
+  m = std::max( m, (Size)3 ); // nb longitudes
+  // vertices are numbered as follows
+  //         0        : bottom pole
+  //         1 --    m: first row
+  //       m+1 --  2*m: second row
+  // ...
+  // (n-1)*m+1 --  n*m: before last row
+  //     n*m+1        : top pole    
+  const Size nbv = 2 + n * m;
+  return Scalars( nbv, 1.0 / radius );
 }
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars 
 DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
-sphereGaussCurvature( Scalar radius, 
-		      int n, int m )
+sphereGaussCurvature( Scalar radius, Size m, Size n )
 {
+  n = std::max( n, (Size)1 ); // nb latitudes (except poles)
+  m = std::max( m, (Size)3 ); // nb longitudes
+  // vertices are numbered as follows
+  //         0        : bottom pole
+  //         1 --    m: first row
+  //       m+1 --  2*m: second row
+  // ...
+  // (n-1)*m+1 --  n*m: before last row
+  //     n*m+1        : top pole    
+  const Size nbv = 2 + n * m;
+  return Scalars( nbv, 1.0 / ( radius * radius ) );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
