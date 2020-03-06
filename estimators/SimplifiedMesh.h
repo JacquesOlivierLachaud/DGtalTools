@@ -466,14 +466,26 @@ namespace DGtal
     typedef typename SimplifiedMesh::Faces          Faces;
 
     enum class Normals { NO_NORMALS, VERTEX_NORMALS, FACE_NORMALS };
+
     static
-    SimplifiedMesh makeSphere( Scalar radius, RealPoint center, Size m, Size n, Normals normals );
+    SimplifiedMesh makeSphere( Scalar radius, RealPoint center,
+			       Size m, Size n, Normals normals );
     
     static
     Scalars sphereMeanCurvatures( Scalar radius, Size m, Size n );
     
     static
     Scalars sphereGaussianCurvatures( Scalar radius, Size m, Size n );
+
+    static
+    SimplifiedMesh makeLantern( Scalar radius, Scalar height, RealPoint center,
+				Size m, Size n, Normals normals );
+    static
+    Scalars lanternMeanCurvatures( Scalar radius, Size m, Size n );
+    
+    static
+    Scalars lanternGaussianCurvatures( Scalar radius, Size m, Size n );
+
   };
   
 } // namespace DGtal

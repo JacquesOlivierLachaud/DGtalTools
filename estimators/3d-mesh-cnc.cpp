@@ -269,7 +269,7 @@ int main( int argc, char** argv )
   general_opt.add_options()
     ( "help,h", "display this message" )
     ( "input,i", po::value<std::string>(), "input file: may be a mesh (.OBJ) or a volume image (.vol)" )
-    ( "mesh", po::value<std::string>(), "input predefined mesh: sphere[-VN|-FN],r,m,n where m/n is the number of latitudes/longitudes" )
+    ( "mesh", po::value<std::string>(), "input predefined mesh: {sphere[|-VN|-FN],r,m,n|lantern[|-VN|-FN],r,h,m,n}, where m/n is the number of latitudes/longitudes" )
     ( "output,o", po::value<std::string>()->default_value( "cnc" ), "the basename for output obj files or <none> if no output obj is wanted." )
     ( "average-normals,K", po::value<int>()->default_value( 0 ), "averages normals by performing <n> times vertexNormals -> faceNormals -> vertexNormals." )
     ( "unit-normals,u", "forces the interpolated normals to have unit norm." )
@@ -342,9 +342,10 @@ int main( int argc, char** argv )
   auto meshargs = SimpleMeshReader::split( mesh, ',' );
   auto meshname = mesh != "" ? meshargs[ 0 ] : "";
   if ( meshname != ""
-       && meshname != "sphere" && meshname != "sphere-VN" && meshname != "sphere-FN" ) 
+       && meshname != "sphere" && meshname != "sphere-VN" && meshname != "sphere-FN"
+       && meshname != "lantern" && meshname != "lantern-VN" && meshname != "lantern-FN" )
     {
-      missingParam("Wrong predefined mesh (should be sphere[-VN|-FN])");
+      missingParam("Wrong predefined mesh (should be {sphere[|-VN|-FN]|lantern[|-VN|-FN])");
       neededArgsGiven = false;
     }
   
@@ -615,6 +616,23 @@ int main( int argc, char** argv )
         ::makeSphere( r, RealPoint(), m, n, normals );
       expected_H_values = SimpleMeshHelper::sphereMeanCurvatures    ( r, m, n );
       expected_G_values = SimpleMeshHelper::sphereGaussianCurvatures( r, m, n );
+      makemesh = true;
+    }
+  else if ( mesh != "" && meshargs.size() >= 5 
+       && ( meshname == "lantern" || meshname == "lantern-VN" || meshname == "lantern-FN" ) )
+    {
+      const double r = std::stof( meshargs[1] );
+      const double h = std::stof( meshargs[2] );
+      const Index  m = std::stoi( meshargs[3] );
+      const Index  n = std::stoi( meshargs[4] );
+      const auto normals =
+        ( meshname == "lantern-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
+        ( meshname == "lantern-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
+        SimpleMeshHelper::Normals::NO_NORMALS;
+      smesh = SimpleMeshHelper
+        ::makeLantern( r, h, RealPoint(), m, n, normals );
+      expected_H_values = SimpleMeshHelper::lanternMeanCurvatures    ( r, m, n );
+      expected_G_values = SimpleMeshHelper::lanternGaussianCurvatures( r, m, n );
       makemesh = true;
     }
   else if ( vm.count( "input" ) && ( ( extension == "obj" )
