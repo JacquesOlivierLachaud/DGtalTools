@@ -601,28 +601,20 @@ int main( int argc, char** argv )
   // Build simplified mesh
   /////////////////////////////////////////////////////////////////////////////
   trace.beginBlock( "Build simplified mesh" );
-  if ( mesh != "" && meshname == "sphere" && meshargs.size() >= 4 )
+  if ( mesh != "" && meshargs.size() >= 4 
+       && ( meshname == "sphere" || meshname == "sphere-VN" || meshname == "sphere-FN" ) )
     {
+      const double r = std::stof( meshargs[1] );
+      const Index  m = std::stoi( meshargs[2] );
+      const Index  n = std::stoi( meshargs[3] );
+      const auto normals =
+        ( meshname == "sphere-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
+        ( meshname == "sphere-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
+        SimpleMeshHelper::Normals::NO_NORMALS;
       smesh = SimpleMeshHelper
-        ::makeSphere( std::stof( meshargs[1] ), RealPoint(),
-                      std::stoi( meshargs[2] ), std::stoi( meshargs[3] ),
-                      SimpleMeshHelper::Normals::NO_NORMALS );
-      makemesh = true;
-    }
-  else if ( mesh != "" && meshname == "sphere-VN" && meshargs.size() >= 4 )
-    {
-      smesh = SimpleMeshHelper
-        ::makeSphere( std::stof( meshargs[1] ), RealPoint(),
-                      std::stoi( meshargs[2] ), std::stoi( meshargs[3] ),
-                      SimpleMeshHelper::Normals::VERTEX_NORMALS );
-      makemesh = true;
-    }
-  else if ( mesh != "" && meshname == "sphere-FN" && meshargs.size() >= 4 )
-    {
-      smesh = SimpleMeshHelper
-        ::makeSphere( std::stof( meshargs[1] ), RealPoint(),
-                      std::stoi( meshargs[2] ), std::stoi( meshargs[3] ),
-                      SimpleMeshHelper::Normals::FACE_NORMALS );
+        ::makeSphere( r, RealPoint(), m, n, normals );
+      expected_H_values = SimpleMeshHelper::sphereMeanCurvatures    ( r, m, n );
+      expected_G_values = SimpleMeshHelper::sphereGaussianCurvatures( r, m, n );
       makemesh = true;
     }
   else if ( vm.count( "input" ) && ( ( extension == "obj" )

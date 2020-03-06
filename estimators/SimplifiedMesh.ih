@@ -935,7 +935,7 @@ makeSphere( Scalar radius, RealPoint center,
 template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars 
 DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
-sphereMeanCurvature( Scalar radius, Size m, Size n )
+sphereMeanCurvatures( Scalar radius, Size m, Size n )
 {
   n = std::max( n, (Size)1 ); // nb latitudes (except poles)
   m = std::max( m, (Size)3 ); // nb longitudes
@@ -954,7 +954,7 @@ sphereMeanCurvature( Scalar radius, Size m, Size n )
 template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars 
 DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
-sphereGaussCurvature( Scalar radius, Size m, Size n )
+sphereGaussianCurvatures( Scalar radius, Size m, Size n )
 {
   n = std::max( n, (Size)1 ); // nb latitudes (except poles)
   m = std::max( m, (Size)3 ); // nb longitudes

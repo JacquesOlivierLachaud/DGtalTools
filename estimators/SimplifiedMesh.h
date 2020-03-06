@@ -470,10 +470,10 @@ namespace DGtal
     SimplifiedMesh makeSphere( Scalar radius, RealPoint center, Size m, Size n, Normals normals );
     
     static
-    Scalars sphereMeanCurvature( Scalar radius, Size m, Size n );
+    Scalars sphereMeanCurvatures( Scalar radius, Size m, Size n );
     
     static
-    Scalars sphereGaussCurvature( Scalar radius, Size m, Size n );
+    Scalars sphereGaussianCurvatures( Scalar radius, Size m, Size n );
   };
   
 } // namespace DGtal
