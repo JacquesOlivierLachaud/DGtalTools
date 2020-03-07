@@ -269,7 +269,7 @@ int main( int argc, char** argv )
   general_opt.add_options()
     ( "help,h", "display this message" )
     ( "input,i", po::value<std::string>(), "input file: may be a mesh (.OBJ) or a volume image (.vol)" )
-    ( "mesh", po::value<std::string>(), "input predefined mesh: {sphere[|-VN|-FN],r,m,n|lantern[|-VN|-FN],r,h,m,n}, where m/n is the number of latitudes/longitudes" )
+    ( "mesh", po::value<std::string>(), "input predefined mesh: {sphere[|-VN|-FN],r,m,n|lantern[|-VN|-FN],r,h,m,n|torus[-VN|-FN],R,r,m,n[,twist]}, where m/n is the number of latitudes/longitudes" )
     ( "output,o", po::value<std::string>()->default_value( "cnc" ), "the basename for output obj files or <none> if no output obj is wanted." )
     ( "average-normals,K", po::value<int>()->default_value( 0 ), "averages normals by performing <n> times vertexNormals -> faceNormals -> vertexNormals." )
     ( "unit-normals,u", "forces the interpolated normals to have unit norm." )
@@ -343,9 +343,10 @@ int main( int argc, char** argv )
   auto meshname = mesh != "" ? meshargs[ 0 ] : "";
   if ( meshname != ""
        && meshname != "sphere" && meshname != "sphere-VN" && meshname != "sphere-FN"
-       && meshname != "lantern" && meshname != "lantern-VN" && meshname != "lantern-FN" )
+       && meshname != "lantern" && meshname != "lantern-VN" && meshname != "lantern-FN"
+       && meshname != "torus" && meshname != "torus-VN" && meshname != "torus-FN" )
     {
-      missingParam("Wrong predefined mesh (should be {sphere[|-VN|-FN]|lantern[|-VN|-FN])");
+      missingParam("Wrong predefined mesh (should be {sphere[|-VN|-FN]|lantern[|-VN|-FN]|torus[-VN|-FN])");
       neededArgsGiven = false;
     }
   
@@ -633,6 +634,24 @@ int main( int argc, char** argv )
         ::makeLantern( r, h, RealPoint(), m, n, normals );
       expected_H_values = SimpleMeshHelper::lanternMeanCurvatures    ( r, m, n );
       expected_G_values = SimpleMeshHelper::lanternGaussianCurvatures( r, m, n );
+      makemesh = true;
+    }
+  else if ( mesh != "" && meshargs.size() >= 5 
+       && ( meshname == "torus" || meshname == "torus-VN" || meshname == "torus-FN" ) )
+    {
+      const double R = std::stof( meshargs[1] );
+      const double r = std::stof( meshargs[2] );
+      const Index  m = std::stoi( meshargs[3] );
+      const Index  n = std::stoi( meshargs[4] );
+      const int twist= std::stoi( meshargs.size() >= 6 ? meshargs[5] : "0" );
+      const auto normals =
+        ( meshname == "torus-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
+        ( meshname == "torus-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
+        SimpleMeshHelper::Normals::NO_NORMALS;
+      smesh = SimpleMeshHelper
+        ::makeTorus( R, r, RealPoint(), m, n, twist, normals );
+      expected_H_values = SimpleMeshHelper::torusMeanCurvatures    ( R, r, m, n );
+      expected_G_values = SimpleMeshHelper::torusGaussianCurvatures( R, r, m, n );
       makemesh = true;
     }
   else if ( vm.count( "input" ) && ( ( extension == "obj" )

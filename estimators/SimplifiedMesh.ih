@@ -1067,5 +1067,106 @@ lanternGaussianCurvatures( Scalar radius, Size m, Size n )
 }
 
 
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::SimplifiedMesh 
+DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
+makeTorus( Scalar big_radius, Scalar small_radius, RealPoint center,
+	   Size m, Size n, int twist, Normals normals )
+{
+  m = std::max( m, (Size)3 ); // nb latitudes
+  n = std::max( n, (Size)3 ); // nb longitudes
+  // vertices are numbered as follows
+  //         0 --  m-1: first row
+  //         m -- 2m-1: second row 
+  // ...
+  //   (n-1)*m -- nm-1: last row
+  const Size nbv = n * m;
+  std::vector< RealPoint > p( nbv );         // positions
+  std::vector< std::vector< Size > > faces; // faces = ( incident vertices )
+  const auto fv = [n] (Size i, Size j) { return i * n + j; };
+  for ( Size i = 0; i < m; ++i )
+    for ( Size j = 0; j < n; ++j )
+      {
+        const Scalar theta = ( 2.0 * M_PI * (double) i ) / (double) m;
+        const Scalar   phi = ( 2.0 * M_PI * (double) j ) / (double) n
+	  + twist * 2.0 * M_PI * (double) i / ( double ) m;
+        p[ fv( i, j ) ] = center
+	  + RealPoint( ( big_radius + small_radius * cos( phi ) ) * cos( theta ),
+		       ( big_radius + small_radius * cos( phi ) ) * sin( theta ),
+		       small_radius * sin( phi ) );
+        // trace.info() << fv( i, j ) << "=(" << i << "," << j << ")"
+        //              << " " << p[ fv( i, j ) ] << std::endl;
+      }
+  for ( Size i = 0; i < m; ++i )
+    for ( Size j = 0; j < n; ++j )
+	{
+	  faces.push_back( std::vector< Size >
+			   { fv( i, j ), fv( (i+1)%m, j ), fv( i, (j+1) % n ) } );
+	  faces.push_back( std::vector< Size >
+			   { fv( i, (j+1) % n ), fv( (i+1)%m, j ), fv( (i+1)%m, (j+1) % n ) } );
+	}
+  SimplifiedMesh smesh( p.cbegin(), p.cend(), faces.cbegin(), faces.cend() );
+  if ( normals == Normals::VERTEX_NORMALS )
+    {
+      std::vector< RealVector > vnormals( nbv );
+      for ( Size i = 0; i < m; ++i )
+	{
+	  const Scalar theta = ( 2.0 * M_PI * (double) i ) / (double) m;
+	  const RealPoint  c = center + RealPoint( big_radius * cos( theta ),
+						   big_radius * sin( theta ), 0.0 );
+	  for ( Size j = 0; j < n; ++j )
+	    vnormals[ fv( i, j ) ] = ( p[ fv( i, j ) ] - c ).getNormalized();
+	}
+      smesh.setVertexNormals( vnormals.cbegin(), vnormals.cend() );
+    }
+  else if ( normals == Normals::FACE_NORMALS )
+    {
+      std::vector< RealVector > fnormals( smesh.nbFaces() );
+      Size k = 0;
+      for ( Size i = 0; i < m; ++i )
+	{
+	  const Scalar theta = ( 2.0 * M_PI * (double) i ) / (double) m;
+	  const RealPoint  c = center + RealPoint( big_radius * cos( theta ),
+						   big_radius * sin( theta ), 0.0 );
+	  for ( Size j = 0; j < n; ++j )
+	    {
+	      fnormals[ k   ] = ( smesh.faceCentroid( k   ) - c ).getNormalized();
+	      fnormals[ k+1 ] = ( smesh.faceCentroid( k+1 ) - c ).getNormalized();
+	      k += 2;
+	    }
+	}
+      smesh.setFaceNormals( fnormals.cbegin(), fnormals.cend() );
+    }
+  return smesh;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars
+DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
+torusMeanCurvatures( Scalar big_radius, Scalar small_radius, 
+		     Size m, Size n )
+{
+  m = std::max( m, (Size)3 ); // nb latitudes
+  n = std::max( n, (Size)3 ); // nb longitudes
+  const Size nbv = n * m;
+  return Scalars( nbv, 0.5 / big_radius + 0.5 / small_radius );
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars
+DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
+torusGaussianCurvatures( Scalar big_radius, Scalar small_radius, 
+			 Size m, Size n )
+{
+  m = std::max( m, (Size)3 ); // nb latitudes
+  n = std::max( n, (Size)3 ); // nb longitudes
+  const Size nbv = n * m;
+  return Scalars( nbv, 1.0 / ( big_radius * small_radius ) );
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////

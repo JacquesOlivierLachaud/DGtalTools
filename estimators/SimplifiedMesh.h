@@ -486,6 +486,17 @@ namespace DGtal
     static
     Scalars lanternGaussianCurvatures( Scalar radius, Size m, Size n );
 
+    static
+    SimplifiedMesh makeTorus( Scalar big_radius, Scalar small_radius, RealPoint center,
+			      Size m, Size n, int twist, Normals normals );
+
+    static
+    Scalars torusMeanCurvatures( Scalar big_radius, Scalar small_radius, 
+				 Size m, Size n );
+    static
+    Scalars torusGaussianCurvatures( Scalar big_radius, Scalar small_radius, 
+				     Size m, Size n );
+    
   };
   
 } // namespace DGtal
