@@ -492,10 +492,10 @@ namespace DGtal
 
     static
     Scalars torusMeanCurvatures( Scalar big_radius, Scalar small_radius, 
-				 Size m, Size n );
+				 Size m, Size n, int twist );
     static
     Scalars torusGaussianCurvatures( Scalar big_radius, Scalar small_radius, 
-				     Size m, Size n );
+				     Size m, Size n, int twist );
     
   };
   

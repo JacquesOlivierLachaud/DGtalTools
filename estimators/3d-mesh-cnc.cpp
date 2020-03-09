@@ -42,6 +42,7 @@
 #include "EstimatorHelpers.h"
 #include "SimplifiedMesh.h"
 #include "CorrectedNormalCurrentComputer.h"
+#include "RusinkiewiczCurvatureFormula.h"
 //#include "FastCorrectedNormalCurrent.h"
 
 
@@ -650,8 +651,8 @@ int main( int argc, char** argv )
         SimpleMeshHelper::Normals::NO_NORMALS;
       smesh = SimpleMeshHelper
         ::makeTorus( R, r, RealPoint(), m, n, twist, normals );
-      expected_H_values = SimpleMeshHelper::torusMeanCurvatures    ( R, r, m, n );
-      expected_G_values = SimpleMeshHelper::torusGaussianCurvatures( R, r, m, n );
+      expected_H_values = SimpleMeshHelper::torusMeanCurvatures    ( R, r, m, n, twist );
+      expected_G_values = SimpleMeshHelper::torusGaussianCurvatures( R, r, m, n, twist );
       makemesh = true;
     }
   else if ( vm.count( "input" ) && ( ( extension == "obj" )
@@ -875,9 +876,9 @@ int main( int argc, char** argv )
   // Output mesh error OBJ files
   /////////////////////////////////////////////////////////////////////////////
   const auto max_error    = vm[ "max-error" ].as<double>();
-  if ( polynomial )
+  if ( polynomial || makemesh )
     { // Error for mean curvature
-      auto exp_H = dual
+      auto exp_H = ( polynomial && dual )
 	? smesh.computeFaceValuesFromVertexValues( expected_H_values )
 	: expected_H_values;
       const auto error_H_values = SHG::getScalarsAbsoluteDifference( measured_H_values,
@@ -891,9 +892,9 @@ int main( int argc, char** argv )
 					smesh, colorsHE );
       trace.info() << "|H-H_CNC|_oo = " << stat_error.max() << std::endl;
     }
-  if ( polynomial )
+  if ( polynomial || makemesh)
     { // Error for gaussian curvature
-      auto exp_G = dual
+      auto exp_G = ( polynomial && dual )
 	? smesh.computeFaceValuesFromVertexValues( expected_G_values )
 	: expected_G_values;
       const auto error_G_values = SHG::getScalarsAbsoluteDifference( measured_G_values,

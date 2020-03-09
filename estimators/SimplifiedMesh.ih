@@ -1146,12 +1146,29 @@ template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars
 DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
 torusMeanCurvatures( Scalar big_radius, Scalar small_radius, 
-		     Size m, Size n )
+		     Size m, Size n, int twist )
 {
   m = std::max( m, (Size)3 ); // nb latitudes
   n = std::max( n, (Size)3 ); // nb longitudes
   const Size nbv = n * m;
-  return Scalars( nbv, 0.5 / big_radius + 0.5 / small_radius );
+  Scalars hvalues( 2*nbv );
+  // H = - ( R + 2r cos phi ) / ( 2r(R + r cos phi) )
+  // G = cos phi / ( r(R + r cos phi) )
+  auto H = [&] ( int i, int j )
+    {
+      const Scalar   phi = ( 2.0 * M_PI * (double) j ) / (double) n
+      + twist * 2.0 * M_PI * (double) i / ( double ) m;
+      return ( big_radius + 2.0 * small_radius * cos( phi ) )
+      / ( 2.0 * small_radius * ( big_radius + small_radius * cos( phi ) ) );
+    };
+  Index f = 0;
+  for ( Size i = 0; i < m; ++i )
+    for ( Size j = 0; j < n; ++j )
+      {
+	hvalues[ f++ ] = ( H( i, j ) + H( (i+1)%m, j ) + H( i, (j+1) % n ) ) / 3.0;
+	hvalues[ f++ ] = ( H( i, (j+1)%n ) + H( (i+1)%m, j ) + H( (i+1)%m, (j+1)%n ) ) / 3.0;
+      }
+  return hvalues;
 }
 
 //-----------------------------------------------------------------------------
@@ -1159,12 +1176,30 @@ template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::Scalars
 DGtal::SimplifiedMeshHelper<TRealPoint, TRealVector>::
 torusGaussianCurvatures( Scalar big_radius, Scalar small_radius, 
-			 Size m, Size n )
+			 Size m, Size n, int twist )
 {
   m = std::max( m, (Size)3 ); // nb latitudes
   n = std::max( n, (Size)3 ); // nb longitudes
   const Size nbv = n * m;
-  return Scalars( nbv, 1.0 / ( big_radius * small_radius ) );
+  Scalars gvalues( 2*nbv );
+  // H = - ( R + 2r cos phi ) / ( 2r(R + r cos phi) )
+  // G = cos phi / ( r(R + r cos phi) )
+  auto G = [&] ( int i, int j )
+    {
+      const Scalar   phi = ( 2.0 * M_PI * (double) j ) / (double) n
+      + twist * 2.0 * M_PI * (double) i / ( double ) m;
+      return  cos( phi )
+      / ( small_radius * ( big_radius + small_radius * cos( phi ) ) );
+    };
+  Index f = 0;
+  for ( Size i = 0; i < m; ++i )
+    for ( Size j = 0; j < n; ++j )
+      {
+	gvalues[ f++ ] = ( G( i, j ) + G( (i+1)%m, j ) + G( i, (j+1) % n ) ) / 3.0;
+	gvalues[ f++ ] = ( G( i, (j+1)%n ) + G( (i+1)%m, j ) + G( (i+1)%m, (j+1)%n ) ) / 3.0;
+      }
+  return gvalues;
+
 }
 
 

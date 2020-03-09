@@ -21,7 +21,7 @@
  * @author Jacques-Olivier Lachaud (\c jacques-olivier.lachaud@univ-savoie.fr )
  * Laboratory of Mathematics (CNRS, UMR 5807), University of Savoie, France
  *
- * @date 2017/06/19
+ * @date 2020/01/01
  *
  * Header file for module CorrectedNormalCurrentFormula.cpp
  *
@@ -62,7 +62,8 @@ namespace DGtal
      Aim: A helper class that provides static methods to compute
      corrected normal current formulas of curvatures.
 
-     @tparam TDigitalSurfaceContainer any type of digital surface container.
+     @tparam TRealPoint any model of 3D RealPoint.
+     @tparam TRealVector any model of 3D RealVector.
 
      Formula for interpolated measures:
      
