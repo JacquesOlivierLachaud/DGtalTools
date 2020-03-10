@@ -1063,7 +1063,7 @@ lanternGaussianCurvatures( Scalar radius, Size m, Size n )
   n = std::max( n, (Size)2 ); // nb latitudes
   m = std::max( m, (Size)3 ); // nb longitudes
   const Size nbv = n * m;
-  return Scalars( nbv, 1.0 / ( radius * radius ) );
+  return Scalars( nbv, 0.0 );
 }
 
 
