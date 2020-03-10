@@ -258,20 +258,36 @@ struct CurvatureComputer
   typedef EstimatorHelpers<KSpace>              EH;
   typedef SH::IdxDigitalSurface                 Surface;
   typedef Surface::DigitalSurfaceContainer      Container;
-  typedef SH::RealVector                        RealVector;
   typedef SH::BinaryImage                       BinaryImage;
   typedef SH::ImplicitShape3D                   ImplicitShape3D;
   typedef SH::DigitalSurface                    DigitalSurface;
   typedef SH::IdxDigitalSurface                 IdxDigitalSurface;
-
+  typedef CorrectedNormalCurrentComputer< RealPoint, RealVector > CNCComputer;
+  typedef CNCComputer::Scalars     Scalars;
+  typedef CNCComputer::RealTensors RealTensors;
 
   /// Creates the object with the meaningful options.
   CurvatureComputer();
-
+  /// Parses command-line options.
   bool parseCommandLine( int argc, char** argv );
 
+  /// Build input from data for further processing.
   bool buildInput();
   bool buildPolynomialOrVolInput();
+  bool buildPredefinedMesh();
+  bool buildObjInput();
+
+  /// Perturbates positions
+  void perturbatePositions();
+  /// Compute normals
+  void computeNormals();
+
+  /// Computes interpolated CNC for estimating curvatures
+  void computeInterpolatedCorrectedNormalCurrent();
+  /// Output measures (G, H, etc) as mesh OBJ files
+  bool outputMeasuresAsMeshObj();
+  /// Output errors (G, H, etc) as mesh OBJ files
+  bool outputErrorsAsMeshObj();
   
   /// Meaningful options for this object.
   po::options_description general_opt;
@@ -287,12 +303,12 @@ struct CurvatureComputer
   std::string       quantity;
   /// Possible anisotropy
   std::string       anisotropy;
-
+  /// Gridstep
+  double            h;
   /// Parameters object
   Parameters        params;
-  
   /// The simplified mesh on which all computations are done
-  SimplifiedMesh    smesh;
+  SimpleMesh    smesh;
   
   
   bool in_obj;
@@ -301,11 +317,47 @@ struct CurvatureComputer
   bool in_polynomial;
 
   KSpace                        K;   // Digital space.
-  CountedPtr<BinaryImage>       bimage( nullptr );
-  CountedPtr<ImplicitShape3D>   shape ( nullptr );
-  CountedPtr<DigitalSurface>    surface( nullptr );
-  CountedPtr<IdxDigitalSurface> idx_surface( nullptr );
+  CountedPtr<BinaryImage>       bimage;
+  CountedPtr<ImplicitShape3D>   shape;
+  CountedPtr<DigitalSurface>    surface;
+  CountedPtr<IdxDigitalSurface> idx_surface;
+  bool blocky;
+  bool dual;
+  
+  /// Stores expected Gaussian curvature values (if applicable)
+  SH::Scalars       expected_G_values;
+  /// Stores measured Gaussian curvature values (if applicable)
+  SH::Scalars       measured_G_values;
+  /// Stores expected mean curvature values (if applicable)
+  SH::Scalars       expected_H_values;
+  /// Stores measured mean curvature values (if applicable)
+  SH::Scalars       measured_H_values;
+  /// Stores expected normal vectors (if applicable)
+  SH::RealVectors   expected_normals;
+  /// Stores measured normal vectors (if applicable)
+  SH::RealVectors   measured_normals;
+  /// Provides statistics on expected Gaussian curvatures (if applicable)
+  Statistic<double> stat_expected_G_curv;
+  /// Provides statistics on measured Gaussian curvatures (if applicable)
+  Statistic<double> stat_measured_G_curv;
+  /// Provides statistics on errors for Gaussian curvatures (if applicable)
+  Statistic<double> stat_error_G_curv;
+  /// Provides statistics on expected mean curvatures (if applicable)
+  Statistic<double> stat_expected_H_curv;
+  /// Provides statistics on measured mean curvatures (if applicable)
+  Statistic<double> stat_measured_H_curv;
+  /// Provides statistics on errors for mean curvatures (if applicable)
+  Statistic<double> stat_error_H_curv;
 
+  Scalars       measured_ball_mu0;
+  Scalars       measured_ball_mu1;
+  Scalars       measured_ball_mu2;
+  RealTensors   measured_ball_muXY;
+  
+  double time_curv_ground_truth;
+  double time_curv_estimations;
+  double time_mu_estimations;
+  double time_normal_estimations;
   
 }; // struct CurvatureComputer
 
@@ -318,316 +370,12 @@ int main( int argc, char** argv )
   if ( ! ok_parse ) return 0;
 
   CC.buildInput();
+  CC.perturbatePositions();
+  CC.computeNormals();
+  CC.computeInterpolatedCorrectedNormalCurrent();
+  CC.outputMeasuresAsMeshObj();
+  CC.outputErrorsAsMeshObj();
   
-  /////////////////////////////////////////////////////////////////////////////
-  // Build simplified mesh
-  /////////////////////////////////////////////////////////////////////////////
-  trace.beginBlock( "Build simplified mesh" );
-  if ( mesh != "" && meshargs.size() >= 4 
-       && ( meshname == "sphere" || meshname == "sphere-VN" || meshname == "sphere-FN" ) )
-    {
-      const double r = std::stof( meshargs[1] );
-      const Index  m = std::stoi( meshargs[2] );
-      const Index  n = std::stoi( meshargs[3] );
-      const auto normals =
-        ( meshname == "sphere-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
-        ( meshname == "sphere-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
-        SimpleMeshHelper::Normals::NO_NORMALS;
-      smesh = SimpleMeshHelper
-        ::makeSphere( r, RealPoint(), m, n, normals );
-      expected_H_values = SimpleMeshHelper::sphereMeanCurvatures    ( r, m, n );
-      expected_G_values = SimpleMeshHelper::sphereGaussianCurvatures( r, m, n );
-      makemesh = true;
-    }
-  else if ( mesh != "" && meshargs.size() >= 5 
-       && ( meshname == "lantern" || meshname == "lantern-VN" || meshname == "lantern-FN" ) )
-    {
-      const double r = std::stof( meshargs[1] );
-      const double h = std::stof( meshargs[2] );
-      const Index  m = std::stoi( meshargs[3] );
-      const Index  n = std::stoi( meshargs[4] );
-      const auto normals =
-        ( meshname == "lantern-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
-        ( meshname == "lantern-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
-        SimpleMeshHelper::Normals::NO_NORMALS;
-      smesh = SimpleMeshHelper
-        ::makeLantern( r, h, RealPoint(), m, n, normals );
-      expected_H_values = SimpleMeshHelper::lanternMeanCurvatures    ( r, m, n );
-      expected_G_values = SimpleMeshHelper::lanternGaussianCurvatures( r, m, n );
-      makemesh = true;
-    }
-  else if ( mesh != "" && meshargs.size() >= 5 
-       && ( meshname == "torus" || meshname == "torus-VN" || meshname == "torus-FN" ) )
-    {
-      const double R = std::stof( meshargs[1] );
-      const double r = std::stof( meshargs[2] );
-      const Index  m = std::stoi( meshargs[3] );
-      const Index  n = std::stoi( meshargs[4] );
-      const int twist= std::stoi( meshargs.size() >= 6 ? meshargs[5] : "0" );
-      const auto normals =
-        ( meshname == "torus-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
-        ( meshname == "torus-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
-        SimpleMeshHelper::Normals::NO_NORMALS;
-      smesh = SimpleMeshHelper
-        ::makeTorus( R, r, RealPoint(), m, n, twist, normals );
-      expected_H_values = SimpleMeshHelper::torusMeanCurvatures    ( R, r, m, n, twist );
-      expected_G_values = SimpleMeshHelper::torusGaussianCurvatures( R, r, m, n, twist );
-      makemesh = true;
-    }
-  else if ( vm.count( "input" ) && ( ( extension == "obj" )
-                                     || ( extension == "OBJ" ) ) )
-    {
-      // Case where input is a mesh obj file.
-      trace.beginBlock( "Reading input obj mesh file" );
-      trace.info() << "Reading file <" << filename << ">" << std::endl;
-      ifstream mesh_input( filename.c_str() );
-      bool  ok = SimpleMeshReader::readOBJ( mesh_input, smesh );
-      meshfile = true;
-      trace.endBlock();
-      if ( ! ok ) {
-	trace.error() << "Error reading file <" << filename << ">" << std::endl;
-	trace.endBlock();
-	return 1;
-      }
-    }
-  else if ( polynomial || volfile )
-    { // We build a mesh
-      trace.beginBlock( "Build mesh from primal/dual surface" );
-      smesh.init( vertices.cbegin(), vertices.cend(),
-		  faces.cbegin(),    faces.cend() );
-      if ( ! measured_normals.empty() )	{
-	if ( dual )
-	  smesh.setVertexNormals( measured_normals.cbegin(), measured_normals.cend() );
-	else
-	  smesh.setFaceNormals( measured_normals.cbegin(), measured_normals.cend() );
-      }
-      trace.endBlock();
-    }
-  trace.info() << smesh << std::endl;
-  trace.endBlock();
-
-  /////////////////////////////////////////////////////////////////////////////
-  // Perturbates positions
-  /////////////////////////////////////////////////////////////////////////////
-  auto uniform_noise  = vm[ "uniform-noise" ].as<double>();  
-  auto adaptive_noise = vm[ "adaptive-noise" ].as<double>();  
-  if ( uniform_noise > 0.0 )
-    {
-      const auto eps = uniform_noise * smesh.averageEdgeLength();
-      smesh.perturbateWithUniformRandomNoise( eps );
-    }
-  if ( adaptive_noise > 0.0 )
-    smesh.perturbateWithAdaptiveUniformRandomNoise( adaptive_noise );
-  
-  /////////////////////////////////////////////////////////////////////////////
-  // Compute normals
-  /////////////////////////////////////////////////////////////////////////////
-  trace.beginBlock( "Compute normals if necessary" );
-  auto weights_normals_f2v = vm[ "weights-normals-f2v" ].as<std::string>();
-  if ( smesh.faceNormals().empty() && smesh.vertexNormals().empty() )
-    {
-      smesh.computeFaceNormalsFromPositions();
-      if ( weights_normals_f2v == "MAX1995" )
-        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
-      else
-        smesh.computeVertexNormalsFromFaceNormals();
-    }
-  else if ( smesh.faceNormals().empty() )
-    smesh.computeFaceNormalsFromVertexNormals();
-  else if ( smesh.vertexNormals().empty() )
-    {
-      if ( weights_normals_f2v == "MAX1995" )
-        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
-      else
-        smesh.computeVertexNormalsFromFaceNormals();
-    }
-  auto nb_avg_normals = vm[ "average-normals"   ].as<int>();
-  for ( int i = 0; i < nb_avg_normals; i++ )
-    {
-      trace.info() << "face normals -> vertex normals" << std::endl;
-      smesh.computeFaceNormalsFromVertexNormals();
-      trace.info() << "vertex normals -> face normals" << std::endl;
-      if ( weights_normals_f2v == "MAX1995" )
-        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
-      else
-        smesh.computeVertexNormalsFromFaceNormals();
-    }
-  trace.info() << smesh << std::endl;
-  trace.endBlock();
-
-  /////////////////////////////////////////////////////////////////////////////
-  // Compute CNC local measures
-  /////////////////////////////////////////////////////////////////////////////
-  trace.beginBlock( "Compute CNC measures" );
-  bool unit = vm.count( "unit-normals" );
-  trace.info() << "Using " << ( unit ? "unit" : "regular" )
-	       << " interpolated normals." << std::endl;
-  typedef CorrectedNormalCurrentComputer< RealPoint, RealVector > CNCComputer;
-  typedef CNCComputer::Scalars     Scalars;
-  typedef CNCComputer::RealTensors RealTensors;
-  CNCComputer cnc( smesh );
-  cnc.computeInterpolatedMeasures( CNCComputer::Measure::ALL_MU, unit );
-  double G = 0.0;
-  int nb_nan = 0;
-  for ( auto g : cnc.mu2 ) {
-    if ( ! isnan( g ) ) G += g;
-    else nb_nan++;
-  }
-  trace.info() << nb_nan << " / " << cnc.mu2.size() << " NaN" << std::endl;
-  trace.info() << "Total Gauss curvature G=" << G << std::endl;
-  trace.endBlock();
-
-  /////////////////////////////////////////////////////////////////////////////
-  // Compute CNC measures within balls
-  /////////////////////////////////////////////////////////////////////////////
-  SH::Scalars       measured_G_values;
-  SH::Scalars       measured_H_values;
-  Statistic<double> stat_measured_G_curv;
-  Statistic<double> stat_measured_H_curv;
-  trace.beginBlock( "Computes CNC measures within balls" );
-  // auto    quantity   = vm[ "quantity"   ].as<std::string>();
-  const double mcoef = vm[ "m-coef"    ].as<double>();
-  const double mpow  = vm[ "m-pow"     ].as<double>();
-  const double mr    = mcoef * pow( h, mpow );
-  trace.info() << "measuring ball radius = " << mr << std::endl;
-  Scalars       measured_ball_mu0 ( smesh.nbFaces() );
-  Scalars       measured_ball_mu1 ( smesh.nbFaces() );
-  Scalars       measured_ball_mu2 ( smesh.nbFaces() );
-  RealTensors   measured_ball_muXY( smesh.nbFaces() );
-  for ( int f = 0; f < smesh.nbFaces(); ++f )
-    {
-      trace.progressBar( f, smesh.nbFaces() );
-      auto wfaces = smesh.computeFacesInclusionsInBall( mr, f );
-      measured_ball_mu0 [ f ] = cnc.interpolatedMu0 ( wfaces );
-      measured_ball_mu1 [ f ] = cnc.interpolatedMu1 ( wfaces );
-      measured_ball_mu2 [ f ] = cnc.interpolatedMu2 ( wfaces );
-      measured_ball_muXY[ f ] = cnc.interpolatedMuXY( wfaces );
-    }
-  trace.endBlock();
-  
-  
-  /////////////////////////////////////////////////////////////////////////////
-  // Output mesh OBJ files
-  /////////////////////////////////////////////////////////////////////////////
-  const auto minValue         = vm[ "minValue" ].as<double>();
-  const auto maxValue         = vm[ "maxValue" ].as<double>();
-  const auto colormap_name    = vm[ "colormap" ].as<std::string>();
-  const auto zt               = vm[ "zero-tic" ].as<double>();
-  //auto params         = SH::defaultParameters();
-  // params( "colormap", colormap_name )( "zero-tic", zt );
-  const auto colormapH = SH::getColorMap
-    ( minValue, maxValue, params );
-  const auto colormapG = SH::getColorMap
-    ( ( minValue < 0.0 ? -1.0 : 1.0 ) * 0.5 * minValue*minValue,
-      0.5 * maxValue*maxValue, params );
-  trace.beginBlock( "Output mesh OBJ file" );
-  auto output_basefile = vm[ "output"   ].as<std::string>();
-  auto output_objfile  = output_basefile + "-primal.obj";
-  ofstream mesh_output( output_objfile.c_str() );
-  bool okw = SimpleMeshWriter::writeOBJ( mesh_output, smesh );
-  mesh_output.close();
-  if ( ! okw ) {
-    trace.error() << "Error writing file <" << output_objfile << ">" << std::endl;
-    return 2;
-  }
-  trace.info() << "Writing mean and Gaussian curvature OBJ files." << std::endl;
-  measured_H_values.resize( smesh.nbFaces() );
-  measured_G_values.resize( smesh.nbFaces() );
-  auto colorsH = SH::Colors( smesh.nbFaces() );
-  auto colorsG = SH::Colors( smesh.nbFaces() );
-  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
-    {
-      if ( isnan( measured_ball_mu0[ i ] ) )
-        trace.warning() << "At face " << i << " mu0 is NaN." << std::endl;
-      measured_H_values[ i ] = measured_ball_mu0[ i ] != 0
-	? measured_ball_mu1[ i ] / measured_ball_mu0[ i ]
-	: 0.0;
-      measured_G_values[ i ] = measured_ball_mu0[ i ] != 0
-	? measured_ball_mu2[ i ] / measured_ball_mu0[ i ]
-	: 0.0;
-      // trace.info() << i << " " << measured_H_values[ i ]
-      //              << " " << measured_G_values[ i ] << std::endl;
-      colorsH[ i ] = colormapH( measured_H_values[ i ] );
-      colorsG[ i ] = colormapG( measured_G_values[ i ] );
-    }
-  stat_measured_H_curv.addValues( measured_H_values.cbegin(),
-				  measured_H_values.cend() );
-  stat_measured_G_curv.addValues( measured_G_values.cbegin(),
-				  measured_G_values.cend() );
-  trace.info() << "- estimated min_H=" << stat_measured_H_curv.min()
-	       << " <= avg_H=" << stat_measured_H_curv.mean()
-	       << " <= max_H=" << stat_measured_H_curv.max() << std::endl;
-  trace.info() << "- estimated min_G=" << stat_measured_G_curv.min()
-	       << " <= avg_G=" << stat_measured_G_curv.mean()
-	       << " <= max_G=" << stat_measured_G_curv.max() << std::endl;
-  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colorsH );
-  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G", smesh, colorsG );
-  if ( zt > 0.0 )
-    {
-      auto edge_predicate_H = [&] ( SH::Idx e )
-	{
-	  auto faces = smesh.edgeFaces()[ e ];
-	  bool inf_zero = false;
-	  bool sup_zero = false;
-	  for ( auto f : faces )
-	    if ( measured_ball_mu1[ f ] < 0.0 ) inf_zero = true;
-	    else sup_zero = true;
-	  return inf_zero && sup_zero;
-	};
-      okw = SimpleMeshWriter::writeEdgeLinesOBJ
-	( output_basefile+"-H-zero", smesh, edge_predicate_H, zt );
-      auto edge_predicate_G = [&] ( SH::Idx e )
-	{
-	  auto faces = smesh.edgeFaces()[ e ];
-	  bool inf_zero = false;
-	  bool sup_zero = false;
-	  for ( auto f : faces )
-	    if ( measured_ball_mu2[ f ] < 0.0 ) inf_zero = true;
-	    else sup_zero = true;
-	  return inf_zero && sup_zero;
-	};
-      okw = SimpleMeshWriter::writeEdgeLinesOBJ
-	( output_basefile+"-G-zero", smesh, edge_predicate_G, zt );
-    }
-  trace.endBlock();
-  
-  /////////////////////////////////////////////////////////////////////////////
-  // Output mesh error OBJ files
-  /////////////////////////////////////////////////////////////////////////////
-  const auto max_error    = vm[ "max-error" ].as<double>();
-  if ( polynomial || makemesh )
-    { // Error for mean curvature
-      auto exp_H = ( polynomial && dual )
-	? smesh.computeFaceValuesFromVertexValues( expected_H_values )
-	: expected_H_values;
-      const auto error_H_values = SHG::getScalarsAbsoluteDifference( measured_H_values,
-								     exp_H );
-      const auto stat_error   = SHG::getStatistic( error_H_values );
-      const auto error_cmap   = getErrorColorMap( max_error );
-      std::vector<Color> colorsHE( smesh.nbFaces() );
-      for ( SH::Idx i = 0; i < colorsHE.size(); i++ )
-	colorsHE[ i ] = error_cmap( error_H_values[ i ] ); 
-      okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H-error.obj",
-					smesh, colorsHE );
-      trace.info() << "|H-H_CNC|_oo = " << stat_error.max() << std::endl;
-    }
-  if ( polynomial || makemesh)
-    { // Error for gaussian curvature
-      auto exp_G = ( polynomial && dual )
-	? smesh.computeFaceValuesFromVertexValues( expected_G_values )
-	: expected_G_values;
-      const auto error_G_values = SHG::getScalarsAbsoluteDifference( measured_G_values,
-								     exp_G );
-      const auto stat_error   = SHG::getStatistic( error_G_values );
-      const auto error_cmap   = getErrorColorMap( max_error );
-      std::vector<Color> colorsGE( smesh.nbFaces() );
-      for ( SH::Idx i = 0; i < colorsGE.size(); i++ )
-	colorsGE[ i ] = error_cmap( error_G_values[ i ] ); 
-      okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G-error.obj",
-					smesh, colorsGE );
-      trace.info() << "|G-G_CNC|_oo = " << stat_error.max() << std::endl;
-    }
-      
 
   // const auto minValue         = vm[ "minValue" ].as<double>();
   // const auto maxValue         = vm[ "maxValue" ].as<double>();
@@ -1059,9 +807,18 @@ int main( int argc, char** argv )
 /// Creates the object with the meaningful options.
 /////////////////////////////////////////////////////////////////////////////
 CurvatureComputer::CurvatureComputer()
-  : general_opt( "Allowed options are" )
+  : general_opt( "Allowed options are" ),
+    bimage( nullptr ),
+    shape ( nullptr ),
+    surface( nullptr ),
+    idx_surface( nullptr )
 {
+  // initializes some parameters
   params = SH::defaultParameters() | SHG::defaultParameters();
+  time_curv_ground_truth  = 0.0;
+  time_curv_estimations   = 0.0;
+  time_mu_estimations     = 0.0;
+  time_normal_estimations = 0.0;
 
   // Create command line options
   general_opt.add_options()
@@ -1176,6 +933,7 @@ CurvatureComputer::parseCommandLine( int argc, char** argv )
   /////////////////////////////////////////////////////////////////////////////
   // Checking quantities
   /////////////////////////////////////////////////////////////////////////////
+  h          = vm[ "gridstep" ].as<double>();
   quantity   = vm[ "quantity"   ].as<std::string>();
   anisotropy = vm[ "anisotropy" ].as<std::string>();
   std::vector< std::string > quantities = { "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "MuXY", "HII", "GII" };
@@ -1203,21 +961,27 @@ CurvatureComputer::parseCommandLine( int argc, char** argv )
   return true;
 }
 
+/////////////////////////////////////////////////////////////////////////////
+/// Build input from data for further processing.
+/////////////////////////////////////////////////////////////////////////////
 bool
 CurvatureComputer::buildInput()
 {
-  if ( in_vol || in_polynomial ) return buildPolynomialOrVolInput();
+  bool build_ok = false;
+  if ( in_vol || in_polynomial ) build_ok = buildPolynomialOrVolInput();
+  if ( in_mesh )                 build_ok = buildPredefinedMesh();
+  if ( in_obj )                  build_ok = buildObjInput();
+  return build_ok;
 }
 
+/////////////////////////////////////////////////////////////////////////////
+/// Taking care of vol image file or implicit polynomial
+/////////////////////////////////////////////////////////////////////////////
 bool
 CurvatureComputer::buildPolynomialOrVolInput()
 {
-  /////////////////////////////////////////////////////////////////////////////
-  // Taking care of vol image file or implicit polynomial
-
-  trace.beginBlock( "Make Shape" );
+  trace.beginBlock( "Make Shape from vol file or implicit polynomial" );
   // Generic parameters.
-  const double       h = vm[ "gridstep" ].as<double>();
   const auto estimator = vm[ "estimator" ].as<string>();
   params( "gridstep",          h ); // gridstep
   params( "noise",             vm[ "noise"    ].as<double>() );
@@ -1250,7 +1014,7 @@ CurvatureComputer::buildPolynomialOrVolInput()
       K            = SH::getKSpace( params );
       auto dshape  = SH::makeDigitizedImplicitShape3D( shape, params );
       bimage       = SH::makeBinaryImage( dshape, params );
-      if ( bimage == nullptr ) polynomial = false; // failure
+      if ( bimage == nullptr ) in_polynomial = false; // failure
     }
   
   /////////////////////////////////////////////////////////////////////////////
@@ -1292,30 +1056,16 @@ CurvatureComputer::buildPolynomialOrVolInput()
     trace.info() << "- surface has " << surface->size()<< " surfels." << std::endl;
   trace.endBlock();
 
-
   /////////////////////////////////////////////////////////////////////////////
   // Computing ground truth values if possible.
   /////////////////////////////////////////////////////////////////////////////
-
-  // TODO
-  
-  SH::Scalars       expected_G_values;
-  SH::Scalars       expected_H_values;
-  SH::RealVectors   expected_normals;
-  SH::RealVectors   measured_normals;
-  Statistic<double> stat_expected_G_curv;
-  Statistic<double> stat_expected_H_curv;
-  double time_curv_ground_truth  = 0.0;
-  double time_curv_estimations   = 0.0;
-  double time_mu_estimations     = 0.0;
-  double time_normal_estimations = 0.0;
   trace.beginBlock( "Compute surfels" );
   params( "surfaceTraversal", "Default" );
   const auto     surfels = ( surface != nullptr )
     ? SH::getSurfelRange( surface, params )
     : SH::SurfelRange();
   trace.endBlock();
-  if ( polynomial )
+  if ( in_polynomial )
     {
       trace.beginBlock( "Compute true curvatures" );
       expected_H_values = SHG::getMeanCurvatures( shape, K, surfels, params );
@@ -1340,9 +1090,9 @@ CurvatureComputer::buildPolynomialOrVolInput()
   /////////////////////////////////////////////////////////////////////////////
   trace.beginBlock( "Compute primal/dual surface" );
   auto digital_surface_mode = vm[ "digital-surface" ].as<std::string>();
-  bool blocky = digital_surface_mode == "PRIMAL" || digital_surface_mode == "DUAL"
-    || ! polynomial;
-  bool   dual = digital_surface_mode == "DUAL" || digital_surface_mode == "PDUAL";
+  blocky = digital_surface_mode == "PRIMAL" || digital_surface_mode == "DUAL"
+    || ! in_polynomial;
+  dual   = digital_surface_mode == "DUAL" || digital_surface_mode == "PDUAL";
   SH::RealPoints  pos_surf; 
   SH::RealPoints  ppos_surf;
   SH::RealPoints  vertices;
@@ -1394,20 +1144,19 @@ CurvatureComputer::buildPolynomialOrVolInput()
     }
   trace.endBlock();
 
-  
   /////////////////////////////////////////////////////////////////////////////
   // Compute true and/or estimated normal vectors
   /////////////////////////////////////////////////////////////////////////////
-  if ( polynomial )
+  if ( in_polynomial )
     {
       trace.beginBlock( "Compute true normals" );
       expected_normals = SHG::getNormalVectors( shape, K, surfels, params );
       trace.endBlock();
     }
-  if ( polynomial || volfile )
+  if ( in_polynomial || in_vol )
     {
       trace.beginBlock( "Estimate normals" );
-      if ( estimator == "True" && polynomial )
+      if ( estimator == "True" && in_polynomial )
 	measured_normals = expected_normals;
       else if ( estimator == "CTrivial" )
 	measured_normals = SHG::getCTrivialNormalVectors( surface, surfels, params );
@@ -1423,5 +1172,344 @@ CurvatureComputer::buildPolynomialOrVolInput()
       // else "Geometric" normals.
       time_normal_estimations = trace.endBlock();
     }
-  
+  // We build a mesh
+  trace.beginBlock( "Build mesh from primal/dual surface" );
+  smesh.init( vertices.cbegin(), vertices.cend(),
+	      faces.cbegin(),    faces.cend() );
+  if ( ! measured_normals.empty() ) {
+    if ( dual )
+      smesh.setVertexNormals( measured_normals.cbegin(), measured_normals.cend() );
+    else
+      smesh.setFaceNormals( measured_normals.cbegin(), measured_normals.cend() );
+  }
+  trace.endBlock();
+  trace.info() << smesh << std::endl;
+  trace.endBlock();
+  return in_polynomial || in_vol;
 }
+
+
+/////////////////////////////////////////////////////////////////////////////
+/// Taking care of predefined parametric meshes
+/////////////////////////////////////////////////////////////////////////////
+bool
+CurvatureComputer::buildPredefinedMesh()
+{
+  ASSERT( in_mesh );
+  trace.beginBlock( "Build predefined parametric mesh" );
+  if ( meshargs.size() >= 4
+       && ( meshname == "sphere" || meshname == "sphere-VN"
+	    || meshname == "sphere-FN" ) )
+    {
+      const double r = std::stof( meshargs[1] );
+      const Index  m = std::stoi( meshargs[2] );
+      const Index  n = std::stoi( meshargs[3] );
+      const auto normals =
+        ( meshname == "sphere-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
+        ( meshname == "sphere-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
+        SimpleMeshHelper::Normals::NO_NORMALS;
+      smesh = SimpleMeshHelper
+        ::makeSphere( r, RealPoint(), m, n, normals );
+      expected_H_values = SimpleMeshHelper::sphereMeanCurvatures    ( r, m, n );
+      expected_G_values = SimpleMeshHelper::sphereGaussianCurvatures( r, m, n );
+    }
+  else if ( meshargs.size() >= 5 
+	    && ( meshname == "lantern" || meshname == "lantern-VN"
+		 || meshname == "lantern-FN" ) )
+    {
+      const double r = std::stof( meshargs[1] );
+      const double h = std::stof( meshargs[2] );
+      const Index  m = std::stoi( meshargs[3] );
+      const Index  n = std::stoi( meshargs[4] );
+      const auto normals =
+        ( meshname == "lantern-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
+        ( meshname == "lantern-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
+        SimpleMeshHelper::Normals::NO_NORMALS;
+      smesh = SimpleMeshHelper
+        ::makeLantern( r, h, RealPoint(), m, n, normals );
+      expected_H_values = SimpleMeshHelper::lanternMeanCurvatures    ( r, m, n );
+      expected_G_values = SimpleMeshHelper::lanternGaussianCurvatures( r, m, n );
+    }
+  else if ( meshargs.size() >= 5 
+	    && ( meshname == "torus" || meshname == "torus-VN"
+		 || meshname == "torus-FN" ) )
+    {
+      const double R = std::stof( meshargs[1] );
+      const double r = std::stof( meshargs[2] );
+      const Index  m = std::stoi( meshargs[3] );
+      const Index  n = std::stoi( meshargs[4] );
+      const int twist= std::stoi( meshargs.size() >= 6 ? meshargs[5] : "0" );
+      const auto normals =
+        ( meshname == "torus-VN" ) ? SimpleMeshHelper::Normals::VERTEX_NORMALS :
+        ( meshname == "torus-FN" ) ? SimpleMeshHelper::Normals::FACE_NORMALS :
+        SimpleMeshHelper::Normals::NO_NORMALS;
+      smesh = SimpleMeshHelper
+        ::makeTorus( R, r, RealPoint(), m, n, twist, normals );
+      expected_H_values = SimpleMeshHelper::torusMeanCurvatures    ( R, r, m, n, twist );
+      expected_G_values = SimpleMeshHelper::torusGaussianCurvatures( R, r, m, n, twist );
+    }
+  else
+    in_mesh = false;
+  return in_mesh;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+/// Taking care of OBJ input files
+/////////////////////////////////////////////////////////////////////////////
+bool
+CurvatureComputer::buildObjInput()
+{
+  ASSERT( in_obj );
+  // Case where input is a mesh obj file.
+  trace.beginBlock( "Reading input obj mesh file" );
+  trace.info() << "Reading file <" << filename << ">" << std::endl;
+  ifstream mesh_input( filename.c_str() );
+  bool  ok = SimpleMeshReader::readOBJ( mesh_input, smesh );
+  trace.endBlock();
+  if ( ! ok ) {
+    trace.error() << "Error reading file <" << filename << ">" << std::endl;
+    in_obj = false;
+  }
+  return in_obj;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Perturbate positions
+/////////////////////////////////////////////////////////////////////////////
+void
+CurvatureComputer::perturbatePositions()
+{
+  auto uniform_noise  = vm[ "uniform-noise" ].as<double>();  
+  auto adaptive_noise = vm[ "adaptive-noise" ].as<double>();  
+  if ( uniform_noise > 0.0 )
+    {
+      const auto eps = uniform_noise * smesh.averageEdgeLength();
+      smesh.perturbateWithUniformRandomNoise( eps );
+    }
+  if ( adaptive_noise > 0.0 )
+    smesh.perturbateWithAdaptiveUniformRandomNoise( adaptive_noise );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+/// Compute normals
+/////////////////////////////////////////////////////////////////////////////
+void
+CurvatureComputer::computeNormals()
+{
+  trace.beginBlock( "Compute normals if necessary" );
+  auto weights_normals_f2v = vm[ "weights-normals-f2v" ].as<std::string>();
+  if ( smesh.faceNormals().empty() && smesh.vertexNormals().empty() )
+    {
+      smesh.computeFaceNormalsFromPositions();
+      if ( weights_normals_f2v == "MAX1995" )
+        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+      else
+        smesh.computeVertexNormalsFromFaceNormals();
+    }
+  else if ( smesh.faceNormals().empty() )
+    smesh.computeFaceNormalsFromVertexNormals();
+  else if ( smesh.vertexNormals().empty() )
+    {
+      if ( weights_normals_f2v == "MAX1995" )
+        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+      else
+        smesh.computeVertexNormalsFromFaceNormals();
+    }
+  auto nb_avg_normals = vm[ "average-normals"   ].as<int>();
+  for ( int i = 0; i < nb_avg_normals; i++ )
+    {
+      trace.info() << "face normals -> vertex normals" << std::endl;
+      smesh.computeFaceNormalsFromVertexNormals();
+      trace.info() << "vertex normals -> face normals" << std::endl;
+      if ( weights_normals_f2v == "MAX1995" )
+        smesh.computeVertexNormalsFromFaceNormalsWithMaxWeights();
+      else
+        smesh.computeVertexNormalsFromFaceNormals();
+    }
+  trace.info() << smesh << std::endl;
+  trace.endBlock();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Compute interpolated CorrectedNormalCurrent measures
+/////////////////////////////////////////////////////////////////////////////
+void
+CurvatureComputer::computeInterpolatedCorrectedNormalCurrent()
+{
+  // Compute local CNC measures
+  trace.beginBlock( "Compute local CNC measures" );
+  bool unit = vm.count( "unit-normals" );
+  trace.info() << "Using " << ( unit ? "unit" : "regular" )
+	       << " interpolated normals." << std::endl;
+  CNCComputer cnc( smesh );
+  cnc.computeInterpolatedMeasures( CNCComputer::Measure::ALL_MU, unit );
+  double G = 0.0;
+  int nb_nan = 0;
+  for ( auto g : cnc.mu2 ) {
+    if ( ! isnan( g ) ) G += g;
+    else nb_nan++;
+  }
+  trace.info() << nb_nan << " / " << cnc.mu2.size() << " NaN" << std::endl;
+  trace.info() << "Total Gauss curvature G=" << G << std::endl;
+  trace.endBlock();
+
+  // Compute CNC measures within balls
+  trace.beginBlock( "Computes CNC measures within balls" );
+  const double mcoef = vm[ "m-coef"    ].as<double>();
+  const double mpow  = vm[ "m-pow"     ].as<double>();
+  const double mr    = mcoef * pow( h, mpow );
+  trace.info() << "measuring ball radius = " << mr << std::endl;
+  measured_ball_mu0.resize ( smesh.nbFaces() );
+  measured_ball_mu1.resize ( smesh.nbFaces() );
+  measured_ball_mu2.resize ( smesh.nbFaces() );
+  measured_ball_muXY.resize( smesh.nbFaces() );
+  for ( int f = 0; f < smesh.nbFaces(); ++f )
+    {
+      trace.progressBar( f, smesh.nbFaces() );
+      auto wfaces = smesh.computeFacesInclusionsInBall( mr, f );
+      measured_ball_mu0 [ f ] = cnc.interpolatedMu0 ( wfaces );
+      measured_ball_mu1 [ f ] = cnc.interpolatedMu1 ( wfaces );
+      measured_ball_mu2 [ f ] = cnc.interpolatedMu2 ( wfaces );
+      measured_ball_muXY[ f ] = cnc.interpolatedMuXY( wfaces );
+    }
+  trace.endBlock();
+
+  trace.beginBlock( "Computes curvatures from CNC measures" );
+  measured_H_values.resize( smesh.nbFaces() );
+  measured_G_values.resize( smesh.nbFaces() );
+  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
+    {
+      if ( isnan( measured_ball_mu0[ i ] ) )
+        trace.warning() << "At face " << i << " mu0 is NaN." << std::endl;
+      measured_H_values[ i ] = measured_ball_mu0[ i ] != 0
+	? measured_ball_mu1[ i ] / measured_ball_mu0[ i ]
+	: 0.0;
+      measured_G_values[ i ] = measured_ball_mu0[ i ] != 0
+	? measured_ball_mu2[ i ] / measured_ball_mu0[ i ]
+	: 0.0;
+    }
+  stat_measured_H_curv.addValues( measured_H_values.cbegin(),
+				  measured_H_values.cend() );
+  stat_measured_G_curv.addValues( measured_G_values.cbegin(),
+				  measured_G_values.cend() );
+  trace.info() << "- estimated min_H=" << stat_measured_H_curv.min()
+	       << " <= avg_H=" << stat_measured_H_curv.mean()
+	       << " <= max_H=" << stat_measured_H_curv.max() << std::endl;
+  trace.info() << "- estimated min_G=" << stat_measured_G_curv.min()
+	       << " <= avg_G=" << stat_measured_G_curv.mean()
+	       << " <= max_G=" << stat_measured_G_curv.max() << std::endl;
+  trace.endBlock();
+}  
+
+/////////////////////////////////////////////////////////////////////////////
+/// Output measures (G, H, etc) as mesh OBJ files
+/////////////////////////////////////////////////////////////////////////////
+bool
+CurvatureComputer::outputMeasuresAsMeshObj()
+{
+  const auto output_basefile  = vm[ "output"   ].as<std::string>();
+  if ( output_basefile == "" || output_basefile == "none" ) return false;
+  const auto minValue         = vm[ "minValue" ].as<double>();
+  const auto maxValue         = vm[ "maxValue" ].as<double>();
+  const auto colormap_name    = vm[ "colormap" ].as<std::string>();
+  const auto zt               = vm[ "zero-tic" ].as<double>();
+  const auto colormapH = SH::getColorMap
+    ( minValue, maxValue, params );
+  const auto colormapG = SH::getColorMap
+    ( ( minValue < 0.0 ? -1.0 : 1.0 ) * 0.5 * minValue*minValue,
+      0.5 * maxValue*maxValue, params );
+  trace.beginBlock( "Output measures in mesh OBJ file" );
+  auto output_objfile  = output_basefile + "-primal.obj";
+  ofstream mesh_output( output_objfile.c_str() );
+  bool okw = SimpleMeshWriter::writeOBJ( mesh_output, smesh );
+  mesh_output.close();
+  if ( ! okw ) {
+    trace.error() << "Error writing file <" << output_objfile << ">" << std::endl;
+    return false;
+  }
+  trace.info() << "Writing mean and Gaussian curvature OBJ files." << std::endl;
+  auto colorsH = SH::Colors( smesh.nbFaces() );
+  auto colorsG = SH::Colors( smesh.nbFaces() );
+  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
+    {
+      colorsH[ i ] = colormapH( measured_H_values[ i ] );
+      colorsG[ i ] = colormapG( measured_G_values[ i ] );
+    }
+  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colorsH );
+  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G", smesh, colorsG );
+  if ( zt > 0.0 )
+    {
+      auto edge_predicate_H = [&] ( SH::Idx e )
+	{
+	  auto faces = smesh.edgeFaces()[ e ];
+	  bool inf_zero = false;
+	  bool sup_zero = false;
+	  for ( auto f : faces )
+	    if ( measured_H_values[ f ] < 0.0 ) inf_zero = true;
+	    else sup_zero = true;
+	  return inf_zero && sup_zero;
+	};
+      okw = SimpleMeshWriter::writeEdgeLinesOBJ
+	( output_basefile+"-H-zero", smesh, edge_predicate_H, zt );
+      auto edge_predicate_G = [&] ( SH::Idx e )
+	{
+	  auto faces = smesh.edgeFaces()[ e ];
+	  bool inf_zero = false;
+	  bool sup_zero = false;
+	  for ( auto f : faces )
+	    if ( measured_G_values[ f ] < 0.0 ) inf_zero = true;
+	    else sup_zero = true;
+	  return inf_zero && sup_zero;
+	};
+      okw = SimpleMeshWriter::writeEdgeLinesOBJ
+	( output_basefile+"-G-zero", smesh, edge_predicate_G, zt );
+    }
+  trace.endBlock();
+  return okw;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+/// Output errors (G, H, etc) as mesh OBJ files
+/////////////////////////////////////////////////////////////////////////////
+bool
+CurvatureComputer::outputErrorsAsMeshObj()
+{
+  bool okw = false;
+  if ( ! ( in_polynomial || in_mesh ) ) return okw;
+  const auto output_basefile  = vm[ "output"   ].as<std::string>();
+  const auto max_error    = vm[ "max-error" ].as<double>();
+  const auto error_cmap   = getErrorColorMap( max_error );
+  trace.beginBlock( "Output errors in mesh OBJ file" );
+  // Error for mean curvature
+  auto exp_H = ( in_polynomial && dual )
+    ? smesh.computeFaceValuesFromVertexValues( expected_H_values )
+    : expected_H_values;
+  const auto error_H_values = SHG::getScalarsAbsoluteDifference( measured_H_values,
+								 exp_H );
+  stat_error_H_curv       = SHG::getStatistic( error_H_values );
+  std::vector<Color> colorsHE( smesh.nbFaces() );
+  for ( SH::Idx i = 0; i < colorsHE.size(); i++ )
+    colorsHE[ i ] = error_cmap( error_H_values[ i ] ); 
+  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H-error.obj",
+				    smesh, colorsHE );
+  trace.info() << "|H-H_CNC|_oo = " << stat_error_H_curv.max() << std::endl;
+
+  // Error for gaussian curvature
+  auto exp_G = ( in_polynomial && dual )
+    ? smesh.computeFaceValuesFromVertexValues( expected_G_values )
+    : expected_G_values;
+  const auto error_G_values = SHG::getScalarsAbsoluteDifference( measured_G_values,
+								 exp_G );
+  stat_error_G_curv       = SHG::getStatistic( error_G_values );
+  std::vector<Color> colorsGE( smesh.nbFaces() );
+  for ( SH::Idx i = 0; i < colorsGE.size(); i++ )
+    colorsGE[ i ] = error_cmap( error_G_values[ i ] ); 
+  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G-error.obj",
+				    smesh, colorsGE );
+  trace.info() << "|G-G_CNC|_oo = " << stat_error_G_curv.max() << std::endl;
+  trace.endBlock();
+  return okw;
+}
+      
