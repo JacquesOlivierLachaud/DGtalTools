@@ -193,14 +193,17 @@ namespace DGtal
       const auto       up = basisp.first;
       const auto       vp = basisp.second;
       RealTensor2D     II;
+      Scalar           w = 0.0;
       for ( Index i = 0; i < x.size(); i++ )
 	{
 	  const auto basisf = basis( b, x[ i ], x[ (i+1)%x.size() ] );
 	  const auto II_i = secondFundamentalForm( b, x[ i ], x[ (i+1)%x.size() ],
 						   ub,u[ i ], u[ (i+1)%x.size() ] );
-	  II += transformTensor2D( II_i, basisf.first, basisf.second, up, vp );
+	  const auto w_i  = area( b, x[ i ], x[ (i+1)%x.size() ] );
+	  w  += w_i;
+	  II += w_i * transformTensor2D( II_i, basisf.first, basisf.second, up, vp );
 	}
-      return II;
+      return (1.0 / w) * II;
     }
 
     /// Computes mean curvature of polygonal face \a pts given normal
@@ -264,12 +267,12 @@ namespace DGtal
 	{
 	  Y[ 2*i   ] = dn[ i ].dot( u );
 	  Y[ 2*i+1 ] = dn[ i ].dot( v );
-	  M.setComponent( 2*i, 0, e[ 0 ].dot( u ) );
-	  M.setComponent( 2*i, 1, e[ 0 ].dot( v ) );
+	  M.setComponent( 2*i, 0, e[ i ].dot( u ) );
+	  M.setComponent( 2*i, 1, e[ i ].dot( v ) );
 	  M.setComponent( 2*i, 2, 0.0 );
 	  M.setComponent( 2*i+1, 0, 0.0 );
-	  M.setComponent( 2*i+1, 1, e[ 0 ].dot( u ) );
-	  M.setComponent( 2*i+1, 2, e[ 0 ].dot( v ) );
+	  M.setComponent( 2*i+1, 1, e[ i ].dot( u ) );
+	  M.setComponent( 2*i+1, 2, e[ i ].dot( v ) );
 	}
     }
     
@@ -297,10 +300,20 @@ namespace DGtal
     /// @param c any point
     /// @return the unit normal vector to abc, ( ab x ac ) / || ab x ac ||.
     static
-    RealVector
-    normal( const RealPoint& a, const RealPoint& b, const RealPoint& c )
+    RealVector normal( const RealPoint& a, const RealPoint& b, const RealPoint& c )
     {
       return ( ( b - a ).crossProduct( c - a ) ).getNormalized();
+    }    
+
+    /// Computes triangle area
+    /// @param a any point
+    /// @param b any point
+    /// @param c any point
+    /// @return the area of triangle abc
+    static
+    Scalar area( const RealPoint& a, const RealPoint& b, const RealPoint& c )
+    {
+      return ( ( b - a ).crossProduct( c - a ) ).norm();
     }    
 
     /// Given a vector of unit vectors, returns their average unit vector.

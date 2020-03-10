@@ -1236,6 +1236,7 @@ bool
 CurvatureComputer::buildPredefinedMesh()
 {
   ASSERT( in_mesh );
+  Scalars exp_H, exp_G;
   trace.beginBlock( "Build predefined parametric mesh" );
   if ( meshargs.size() >= 4
        && ( meshname == "sphere" || meshname == "sphere-VN"
@@ -1250,8 +1251,8 @@ CurvatureComputer::buildPredefinedMesh()
         SimpleMeshHelper::Normals::NO_NORMALS;
       smesh = SimpleMeshHelper
         ::makeSphere( r, RealPoint(), m, n, normals );
-      expected_H_face_values = SimpleMeshHelper::sphereMeanCurvatures    ( r, m, n );
-      expected_G_face_values = SimpleMeshHelper::sphereGaussianCurvatures( r, m, n );
+      exp_H = SimpleMeshHelper::sphereMeanCurvatures    ( r, m, n );
+      exp_G = SimpleMeshHelper::sphereGaussianCurvatures( r, m, n );
     }
   else if ( meshargs.size() >= 5 
 	    && ( meshname == "lantern" || meshname == "lantern-VN"
@@ -1267,8 +1268,8 @@ CurvatureComputer::buildPredefinedMesh()
         SimpleMeshHelper::Normals::NO_NORMALS;
       smesh = SimpleMeshHelper
         ::makeLantern( r, h, RealPoint(), m, n, normals );
-      expected_H_face_values = SimpleMeshHelper::lanternMeanCurvatures    ( r, m, n );
-      expected_G_face_values = SimpleMeshHelper::lanternGaussianCurvatures( r, m, n );
+      exp_H = SimpleMeshHelper::lanternMeanCurvatures    ( r, m, n );
+      exp_G = SimpleMeshHelper::lanternGaussianCurvatures( r, m, n );
     }
   else if ( meshargs.size() >= 5 
 	    && ( meshname == "torus" || meshname == "torus-VN"
@@ -1285,15 +1286,27 @@ CurvatureComputer::buildPredefinedMesh()
         SimpleMeshHelper::Normals::NO_NORMALS;
       smesh = SimpleMeshHelper
         ::makeTorus( R, r, RealPoint(), m, n, twist, normals );
-      expected_H_face_values = SimpleMeshHelper::torusMeanCurvatures    ( R, r, m, n, twist );
-      expected_G_face_values = SimpleMeshHelper::torusGaussianCurvatures( R, r, m, n, twist );
+      exp_H = SimpleMeshHelper::torusMeanCurvatures    ( R, r, m, n, twist );
+      exp_G = SimpleMeshHelper::torusGaussianCurvatures( R, r, m, n, twist );
     }
   else
     in_mesh = false;
   if ( in_mesh )
     {
-      expected_H_vertex_values = smesh.computeVertexValuesFromFaceValues( expected_H_face_values );
-      expected_G_vertex_values = smesh.computeVertexValuesFromFaceValues( expected_G_face_values );
+      if ( exp_H.size() == smesh.nbVertices() )	{
+	  expected_H_face_values   = smesh.computeFaceValuesFromVertexValues( exp_H );
+	  expected_H_vertex_values = exp_H;
+      } else {
+	expected_H_face_values   = exp_H;
+	expected_H_vertex_values = smesh.computeVertexValuesFromFaceValues( exp_H );
+      }
+      if ( exp_G.size() == smesh.nbVertices() )	{
+	  expected_G_face_values   = smesh.computeFaceValuesFromVertexValues( exp_G );
+	  expected_G_vertex_values = exp_G;
+      } else {
+	expected_G_face_values   = exp_G;
+	expected_G_vertex_values = smesh.computeVertexValuesFromFaceValues( exp_G );
+      }
     }
   trace.endBlock();
   return in_mesh;
@@ -1424,7 +1437,6 @@ CurvatureComputer::computeInterpolatedCorrectedNormalCurrent()
   trace.info() << nb_nan << " / " << cnc.mu2.size() << " NaN" << std::endl;
   trace.info() << "Total Gauss curvature G=" << G << std::endl;
   time_mu_estimations = trace.endBlock();
-  trace.endBlock();
 
   // Compute CNC measures within balls
   trace.beginBlock( "Computes CNC measures within balls" );
@@ -1479,6 +1491,7 @@ CurvatureComputer::computeRusinkiewiczCurvatures()
 		      << std::endl;
       return false;
     }
+  trace.beginBlock( "Compute Rusinkiewicz's curvatures" );
   measured_H_face_values.resize( smesh.nbFaces() );
   measured_G_face_values.resize( smesh.nbFaces() );
   Index idx_f = 0;
@@ -1491,9 +1504,12 @@ CurvatureComputer::computeRusinkiewiczCurvatures()
           p[ idx_v ] = smesh.positions()    [ f[ idx_v ] ];
           u[ idx_v ] = smesh.vertexNormals()[ f[ idx_v ] ];
         }
-      measured_H_face_values[ idx_f++ ] = RZFormula::meanCurvature( p, u );
-      measured_G_face_values[ idx_f++ ] = RZFormula::gaussianCurvature( p, u );
+      measured_H_face_values[ idx_f ] = RZFormula::meanCurvature( p, u );
+      measured_G_face_values[ idx_f ] = RZFormula::gaussianCurvature( p, u );
+      idx_f++;
     }
+  time_curv_estimations = trace.endBlock();
+
   return true;
 }
 
@@ -1587,7 +1603,10 @@ CurvatureComputer::outputErrorsAsMeshObj()
     colorsHE[ i ] = error_cmap( error_H_values[ i ] ); 
   okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H-error.obj",
 				    smesh, colorsHE );
+  const auto error_H_l2 = SHG::getScalarsNormL2( measured_H_face_values,
+						 expected_H_face_values );
   trace.info() << "|H-H_CNC|_oo = " << stat_error_H_curv.max() << std::endl;
+  trace.info() << "|H-H_CNC|_2  = " << error_H_l2 << std::endl;
 
   // Error for gaussian curvature
   const auto error_G_values =
@@ -1599,7 +1618,10 @@ CurvatureComputer::outputErrorsAsMeshObj()
     colorsGE[ i ] = error_cmap( error_G_values[ i ] ); 
   okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G-error.obj",
 				    smesh, colorsGE );
+  const auto error_G_l2 = SHG::getScalarsNormL2( measured_G_face_values,
+						 expected_G_face_values );
   trace.info() << "|G-G_CNC|_oo = " << stat_error_G_curv.max() << std::endl;
+  trace.info() << "|G-G_CNC|_2  = " << error_G_l2 << std::endl;
   trace.endBlock();
   return okw;
 }
