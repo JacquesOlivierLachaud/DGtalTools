@@ -190,8 +190,8 @@ namespace DGtal
       const RealVector ub = averageUnitVector( u );
 
       const auto   basisp = basis( b, x[ 0 ], x[ 1 ] );
-      const auto       up = b.first;
-      const auto       vp = b.second;
+      const auto       up = basisp.first;
+      const auto       vp = basisp.second;
       RealTensor2D     II;
       for ( Index i = 0; i < x.size(); i++ )
 	{
@@ -297,8 +297,8 @@ namespace DGtal
     /// @param c any point
     /// @return the unit normal vector to abc, ( ab x ac ) / || ab x ac ||.
     static
-    std::pair< RealVector, RealVector > normal
-    ( const RealPoint& a, const RealPoint& b, const RealPoint& c )
+    RealVector
+    normal( const RealPoint& a, const RealPoint& b, const RealPoint& c )
     {
       return ( ( b - a ).crossProduct( c - a ) ).getNormalized();
     }    
@@ -327,13 +327,13 @@ namespace DGtal
       const auto vp_uf = vp.dot( uf );
       const auto vp_vf = vp.dot( vf );
       U.setComponent
-	( 0, 0, RowVector2D{ up_uf, up_vf } * T * ColumnVector2D{ up_uf, up_vf } );
+	( 0, 0, RowVector2D{ up_uf, up_vf }.dot(T * ColumnVector2D{ up_uf, up_vf }) );
       U.setComponent
-	( 0, 1, RowVector2D{ up_uf, up_vf } * T * ColumnVector2D{ vp_uf, vp_vf } );
+	( 0, 1, RowVector2D{ up_uf, up_vf }.dot(T * ColumnVector2D{ vp_uf, vp_vf }) );
       U.setComponent
-	( 1, 0, RowVector2D{ vp_uf, vp_vf } * T * ColumnVector2D{ up_uf, up_vf } );
+	( 1, 0, RowVector2D{ vp_uf, vp_vf }.dot(T * ColumnVector2D{ up_uf, up_vf }) );
       U.setComponent
-	( 1, 1, RowVector2D{ vp_uf, vp_vf } * T * ColumnVector2D{ vp_uf, vp_vf } );
+	( 1, 1, RowVector2D{ vp_uf, vp_vf }.dot(T * ColumnVector2D{ vp_uf, vp_vf }) );
       return U;
     }
     
