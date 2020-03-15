@@ -407,8 +407,12 @@ namespace DGtal
     typedef DGtal::SimplifiedMesh< RealPoint, RealVector > SimplifiedMesh;
     typedef typename SimplifiedMesh::Size           Size;
     typedef typename SimplifiedMesh::Index          Index;
+    typedef typename SimplifiedMesh::Vertex         Vertex;
     typedef typename SimplifiedMesh::Vertices       Vertices;
+    typedef typename SimplifiedMesh::Face           Face;
     typedef typename SimplifiedMesh::Faces          Faces;
+    typedef typename SimplifiedMesh::Scalar         Scalar;
+    typedef typename SimplifiedMesh::Scalars        Scalars;
     typedef std::vector< Color >                    Colors;
 
     /// Writes a simplified mesh in an output file (in OBJ file format).
@@ -435,7 +439,18 @@ namespace DGtal
 			    const Color&           ambient_color = Color::Black,
 			    const Color&           diffuse_color = Color::Black,
 			    const Color&           specular_color= Color::Black );
-    
+
+    static
+    bool writeIsoLinesOBJ( std::string            objfile,
+			   const SimplifiedMesh & smesh,
+			   const Scalars&         face_values,
+			   const Scalars&         vertex_values,
+			   const Scalar           iso_value,
+			   const double           relative_thickness = 0.05,
+			   const Color&           ambient_color = Color::Black,
+			   const Color&           diffuse_color = Color::Black,
+			   const Color&           specular_color= Color::Black );
+      
   };
 
 

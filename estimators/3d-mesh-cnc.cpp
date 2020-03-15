@@ -289,7 +289,10 @@ struct CurvatureComputer
   bool computeInterpolatedCorrectedNormalCurrent();
   /// Compute Rusinkiewicz curvatures
   bool computeRusinkiewiczCurvatures();
-  
+
+  /// If face or vertex curvatures are not computed, interpolate them
+  /// from the others.
+  bool computeVertexFaceCurvatures();
   /// Output measures (G, H, etc) as mesh OBJ files
   bool outputMeasuresAsMeshObj();
   /// Output errors (G, H, etc) as mesh OBJ files
@@ -387,6 +390,7 @@ int main( int argc, char** argv )
   CC.perturbatePositions();
   CC.computeNormals();
   CC.computeCurvatures();
+  CC.computeVertexFaceCurvatures();
   CC.outputMeasuresAsMeshObj();
   CC.outputErrorsAsMeshObj();
   
@@ -1514,6 +1518,34 @@ CurvatureComputer::computeRusinkiewiczCurvatures()
 }
 
 /////////////////////////////////////////////////////////////////////////////
+/// If vertex or face curvatures are not computed, compute them from
+/// the others.
+/////////////////////////////////////////////////////////////////////////////
+bool
+CurvatureComputer::computeVertexFaceCurvatures()
+{
+  if ( ! measured_H_face_values.empty() )
+    {
+      if ( measured_H_vertex_values.empty() )
+	measured_H_vertex_values
+	  = smesh.computeVertexValuesFromFaceValues( measured_H_face_values );
+    }
+  else if ( ! measured_H_vertex_values.empty() )
+    measured_H_face_values
+      = smesh.computeFaceValuesFromVertexValues( measured_H_vertex_values );
+  if ( ! measured_G_face_values.empty() )
+    {
+      if ( measured_G_vertex_values.empty() )
+	measured_G_vertex_values
+	  = smesh.computeVertexValuesFromFaceValues( measured_G_face_values );
+    }
+  else if ( ! measured_G_vertex_values.empty() )
+    measured_G_face_values
+      = smesh.computeFaceValuesFromVertexValues( measured_G_vertex_values );
+  return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 /// Output measures (G, H, etc) as mesh OBJ files
 /////////////////////////////////////////////////////////////////////////////
 bool
@@ -1551,30 +1583,36 @@ CurvatureComputer::outputMeasuresAsMeshObj()
   okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G", smesh, colorsG );
   if ( zt > 0.0 )
     {
-      auto edge_predicate_H = [&] ( SH::Idx e )
-	{
-	  auto faces = smesh.edgeFaces()[ e ];
-	  bool inf_zero = false;
-	  bool sup_zero = false;
-	  for ( auto f : faces )
-	    if ( measured_H_face_values[ f ] < 0.0 ) inf_zero = true;
-	    else sup_zero = true;
-	  return inf_zero && sup_zero;
-	};
-      okw = SimpleMeshWriter::writeEdgeLinesOBJ
-	( output_basefile+"-H-zero", smesh, edge_predicate_H, zt );
-      auto edge_predicate_G = [&] ( SH::Idx e )
-	{
-	  auto faces = smesh.edgeFaces()[ e ];
-	  bool inf_zero = false;
-	  bool sup_zero = false;
-	  for ( auto f : faces )
-	    if ( measured_G_face_values[ f ] < 0.0 ) inf_zero = true;
-	    else sup_zero = true;
-	  return inf_zero && sup_zero;
-	};
-      okw = SimpleMeshWriter::writeEdgeLinesOBJ
-	( output_basefile+"-G-zero", smesh, edge_predicate_G, zt );
+      okw = SimpleMeshWriter::writeIsoLinesOBJ
+       	( output_basefile+"-H-zero", smesh,
+	  measured_H_face_values, measured_H_vertex_values, 0.0, zt );
+      okw = SimpleMeshWriter::writeIsoLinesOBJ
+       	( output_basefile+"-G-zero", smesh,
+	  measured_G_face_values, measured_G_vertex_values, 0.0, zt );
+      // auto edge_predicate_H = [&] ( SH::Idx e )
+      // 	{
+      // 	  auto faces = smesh.edgeFaces()[ e ];
+      // 	  bool inf_zero = false;
+      // 	  bool sup_zero = false;
+      // 	  for ( auto f : faces )
+      // 	    if ( measured_H_face_values[ f ] < 0.0 ) inf_zero = true;
+      // 	    else sup_zero = true;
+      // 	  return inf_zero && sup_zero;
+      // 	};
+      // okw = SimpleMeshWriter::writeEdgeLinesOBJ
+      // 	( output_basefile+"-H-zero", smesh, edge_predicate_H, zt );
+      // auto edge_predicate_G = [&] ( SH::Idx e )
+      // 	{
+      // 	  auto faces = smesh.edgeFaces()[ e ];
+      // 	  bool inf_zero = false;
+      // 	  bool sup_zero = false;
+      // 	  for ( auto f : faces )
+      // 	    if ( measured_G_face_values[ f ] < 0.0 ) inf_zero = true;
+      // 	    else sup_zero = true;
+      // 	  return inf_zero && sup_zero;
+      // 	};
+      // okw = SimpleMeshWriter::writeEdgeLinesOBJ
+      // 	( output_basefile+"-G-zero", smesh, edge_predicate_G, zt );
     }
   trace.endBlock();
   return okw;
