@@ -56,7 +56,7 @@ namespace DGtal
   /**
      Description of class 'RusinkiewiczCurvatureFormula' <p> \brief
      Aim: A helper class that provides static methods to compute
-     corrected normal current formulas of curvatures.
+     Rusinkiewicz formulas of curvatures.
 
      @tparam TRealPoint any model of 3D RealPoint.
      @tparam TRealVector any model of 3D RealVector.

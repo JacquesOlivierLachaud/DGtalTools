@@ -226,6 +226,25 @@ namespace DGtal
     const std::vector< Faces >& edgeFaces() const
     { return myEdgeFaces; }
 
+    /// @return a const reference to the vector giving for each edge
+    /// its incident faces to its right (zero if open, one, or more if
+    /// non manifold).
+    ///
+    /// @note an edge is stored as a vertex pair (i,j), i < j. So a
+    /// face to its right, being defined ccw, means that the face is
+    /// some `(..., j, i, ... )`.
+    const std::vector< Faces >& edgeRightFaces() const 
+    { return myEdgeRightFaces; }
+
+    /// @return a const reference to the vector giving for each edge
+    /// its incident faces to its left (zero if open, one, or more if
+    /// non manifold).
+    ///
+    /// @note an edge is stored as a vertex pair (i,j), i < j. So a
+    /// face to its left, being defined ccw, means that the face is
+    /// some `(..., i, j, ... )`.
+    const std::vector< Faces >& edgeLeftFaces() const 
+    { return myEdgeLeftFaces; }
     
     
     /// @}
@@ -308,7 +327,19 @@ namespace DGtal
     std::vector< VertexPair >   myEdgeVertices;
     /// For each edge, its faces (one, two, or more if non manifold)
     std::vector< Faces >        myEdgeFaces;
-    
+    /// For each edge, its faces to its right  (zero if open, one, or more if
+    /// non manifold).
+    /// @note an edge is stored as a vertex pair (i,j), i < j. So a
+    /// face to its right, being defined ccw, means that the face is
+    /// some `(..., j, i, ... )`.
+    std::vector< Faces >        myEdgeRightFaces;
+    /// For each edge, its faces to its left  (zero if open, one, or more if
+    /// non manifold).
+    /// @note an edge is stored as a vertex pair (i,j), i < j. So a
+    /// face to its left, being defined ccw, means that the face is
+    /// some `(..., i, j, ... )`.
+    std::vector< Faces >        myEdgeLeftFaces;
+
     // ------------------------- Private Datas --------------------------------
   private:
 

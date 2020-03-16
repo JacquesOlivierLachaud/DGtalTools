@@ -556,7 +556,9 @@ void
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 computeEdges()
 {
-  std::map< VertexPair, std::vector<Face> > edge2face;
+  std::map< VertexPair, std::vector<Face> > edge2face_right;
+  std::map< VertexPair, std::vector<Face> > edge2face_left;
+  std::set< VertexPair > edges;
   Index idx_f = 0;
   for ( auto incident_vertices : incidentVertices() )
     {
@@ -565,18 +567,31 @@ computeEdges()
 	{
 	  VertexPair e = std::make_pair( incident_vertices[ i ],
 					 incident_vertices[ (i+1) % n ] );
-	  if ( e.second < e.first ) std::swap( e.first, e.second );
-	  edge2face[ e ].push_back( idx_f );
+	  if ( e.first < e.second ) {
+	    edge2face_left[ e ].push_back( idx_f );
+	  } else {
+	    std::swap( e.first, e.second );
+	    edge2face_right[ e ].push_back( idx_f );
+	  }
+	  edges.insert( e );
 	}
       idx_f++;
     }
-  myEdgeVertices.resize( edge2face.size() );
-  myEdgeFaces.resize( edge2face.size() );
+  const Size nbe = edges.size();
+  myEdgeVertices.resize  ( nbe );
+  myEdgeFaces.resize     ( nbe );
+  myEdgeRightFaces.resize( nbe );
+  myEdgeLeftFaces.resize ( nbe );
   Index idx_e = 0;
-  for ( auto e2f : edge2face )
+  for ( auto e : edges )
     {
-      myEdgeVertices[ idx_e ] = e2f.first;
-      myEdgeFaces   [ idx_e ] = e2f.second;
+      myEdgeVertices  [ idx_e ] = e;
+      myEdgeLeftFaces [ idx_e ] = edge2face_left [ e ];
+      myEdgeRightFaces[ idx_e ] = edge2face_right[ e ];
+      myEdgeFaces     [ idx_e ] = myEdgeRightFaces[ idx_e ];
+      myEdgeFaces     [ idx_e ].insert( myEdgeFaces[ idx_e ].back(),
+					myEdgeRightFaces[ idx_e ].cbegin(),
+					myEdgeRightFaces[ idx_e ].cend() );
       idx_e++;
     }
 }
