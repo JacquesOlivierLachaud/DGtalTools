@@ -70,6 +70,7 @@ namespace DGtal
     typedef std::vector< RealPoint >       RealPoints;
     typedef std::vector< RealVector >      RealVectors;
     typedef SimpleMatrix< Scalar, 3, 3 >   RealTensor;
+    typedef std::size_t                    Size;
     typedef std::size_t                    Index;
     static const Dimension dimension = RealPoint::dimension;
 
@@ -86,11 +87,11 @@ namespace DGtal
     {
       if ( pts.size() <  3 ) return 0.0;
       if ( pts.size() == 3 )
-	return area( pts[ 0 ], pts[ 1 ], pts[ 2 ], u );
+	return area( pts[ 0 ], pts[ 1 ], pts[ 2 ] );
       const RealPoint b = barycenter( pts );
       Scalar          a = 0.0;
       for ( Index i = 0; i < pts.size(); i++ )
-	a += area( b, pts[ i ], pts[ (i+1)%pts.size() ], u );
+	a += area( b, pts[ i ], pts[ (i+1)%pts.size() ] );
       return a;
     }
 
@@ -125,7 +126,7 @@ namespace DGtal
       Scalar angle_sum = 0.0;
       for ( Size i = 0; i < vtcs.size(); i++ )
 	angle_sum += acos( (vtcs[i] - a).getNormalized()
-			   .dot( ( vtcs[(i+1)%size()] - a ).getNormalized() ) );
+			   .dot( ( vtcs[(i+1)%vtcs.size()] - a ).getNormalized() ) );
       return 2.0 * M_PI - angle_sum;
     }
 
@@ -139,9 +140,9 @@ namespace DGtal
     ( const RealPoint& a, const RealPoints& pairs )
     {
       Scalar angle_sum = 0.0;
-      for ( Size i = 0; i < vtcs.size(); i += 2 )
-	angle_sum += acos( (vtcs[i] - a).getNormalized()
-			   .dot( ( vtcs[(i+1)%size()] - a ).getNormalized() ) );
+      for ( Size i = 0; i < pairs.size(); i += 2 )
+	angle_sum += acos( ( pairs[i] - a ).getNormalized()
+			   .dot( ( pairs[i+1] - a ).getNormalized() ) );
       return 2.0 * M_PI - angle_sum;
     }
     

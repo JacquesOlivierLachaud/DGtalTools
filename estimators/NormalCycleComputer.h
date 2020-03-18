@@ -48,7 +48,7 @@
 #include "DGtal/base/Common.h"
 #include "DGtal/helpers/StdDefs.h"
 #include "SimplifiedMesh.h"
-#include "CorrectedNormalCurrentFormula.h"
+#include "NormalCycleFormula.h"
 
 
 namespace DGtal
@@ -86,9 +86,10 @@ namespace DGtal
     /// The type used for numbering vertices, edges, faces
     typedef std::size_t                             Index;
     typedef Index                                   Edge;
+    typedef Index                                   Face;
+    typedef Index                                   Vertex;
     typedef std::pair< Edge, Scalar >               WeightedEdge;
     typedef std::pair< Face, Scalar >               WeightedFace;
-    typedef Index                                   Vertex;
     /// The type that defines a range of vertices
     typedef std::vector< Vertex >                   Vertices;
     /// The type that defines a range of faces
@@ -97,7 +98,7 @@ namespace DGtal
     typedef std::vector< WeightedEdge >             WeightedEdges;
     typedef std::vector< WeightedEdge >             WeightedFaces;
 
-    enum class Measure { MU0, MU1, MU2, MUXY1, MUXY2, ALL_MU };
+    enum class Measure { MU0, MU1, MU2, MUXY, MUXY1, MUXY2, ALL_MU };
 
     /// Constructor from mesh.
     /// @param aMesh any simplified mesh that is referenced in this object.
@@ -124,15 +125,15 @@ namespace DGtal
     // ------------------------- Public Datas ------------------------------
   public:
     /// Per-face mu0 measure (area).
-    Scalars     mu0;
+    Scalars     localMu0;
     /// Per-edge mu1 measure (mean curvature).
-    Scalars     mu1;
+    Scalars     localMu1;
     /// Per-vertex mu2 measure (Gaussian curvature).
-    Scalars     mu2;
+    Scalars     localMu2;
     /// Per-edge muXY1 measure (2nd fundamental form).
-    RealTensors muXY1;
+    RealTensors localMuXY1;
     /// Per-edge muXY2 measure (2nd fundamental form).
-    RealTensors muXY2;
+    RealTensors localMuXY2;
     
     // ------------------------- Protected Datas ------------------------------
   protected:

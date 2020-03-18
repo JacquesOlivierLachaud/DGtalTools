@@ -43,6 +43,7 @@
 #include "SimplifiedMesh.h"
 #include "CorrectedNormalCurrentComputer.h"
 #include "RusinkiewiczCurvatureFormula.h"
+#include "NormalCycleComputer.h"
 //#include "FastCorrectedNormalCurrent.h"
 
 
