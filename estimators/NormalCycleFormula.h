@@ -78,6 +78,21 @@ namespace DGtal
     /// @name Formulas for curvature
     /// @{
 
+    /// Computes area of polygonal face \a pts.
+    /// @param pts the (ccw ordered) points forming the vertices of a polygonal face.
+    /// @return the area of the given polygonal face.
+    static
+    Scalar area( const RealPoints& pts )
+    {
+      if ( pts.size() <  3 ) return 0.0;
+      if ( pts.size() == 3 )
+	return area( pts[ 0 ], pts[ 1 ], pts[ 2 ], u );
+      const RealPoint b = barycenter( pts );
+      Scalar          a = 0.0;
+      for ( Index i = 0; i < pts.size(); i++ )
+	a += area( b, pts[ i ], pts[ (i+1)%pts.size() ], u );
+      return a;
+    }
 
     /// Computes the mean curvature on edge ab
     /// given normal vectors \a right, \a left.
@@ -109,13 +124,27 @@ namespace DGtal
     {
       Scalar angle_sum = 0.0;
       for ( Size i = 0; i < vtcs.size(); i++ )
-	{
-	  angle_sum += acos( (vtcs[i] - a)
-			     .dot( vtcs[(i+1)%size()]  ) );
-	}
+	angle_sum += acos( (vtcs[i] - a).getNormalized()
+			   .dot( ( vtcs[(i+1)%size()] - a ).getNormalized() ) );
       return 2.0 * M_PI - angle_sum;
     }
 
+    /// Computes the Gaussian curvature at point \a a with incident pairs of points \a pairs.
+    ///
+    /// @param a any point
+    /// @param pairs a range of points [x_0, y_0, x_1, y_1, etc] such that (a,x_i,y_i) is an incident face to a. 
+    /// @return the Gaussian curvature according to Normal Cycle formula.
+    static
+    Scalar gaussianCurvatureWithPairs
+    ( const RealPoint& a, const RealPoints& pairs )
+    {
+      Scalar angle_sum = 0.0;
+      for ( Size i = 0; i < vtcs.size(); i += 2 )
+	angle_sum += acos( (vtcs[i] - a).getNormalized()
+			   .dot( ( vtcs[(i+1)%size()] - a ).getNormalized() ) );
+      return 2.0 * M_PI - angle_sum;
+    }
+    
     /// Computes the anisotropic measure \f$ \bar{H} \f$ at edge ab.
     /// @param a any point
     /// @param b any point

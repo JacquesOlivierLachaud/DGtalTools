@@ -87,6 +87,7 @@ namespace DGtal
     typedef std::size_t                             Index;
     typedef Index                                   Edge;
     typedef std::pair< Edge, Scalar >               WeightedEdge;
+    typedef std::pair< Face, Scalar >               WeightedFace;
     typedef Index                                   Vertex;
     /// The type that defines a range of vertices
     typedef std::vector< Vertex >                   Vertices;
@@ -94,6 +95,7 @@ namespace DGtal
     typedef std::vector< Edge >                     Edges;
     typedef std::vector< Face >                     Faces;
     typedef std::vector< WeightedEdge >             WeightedEdges;
+    typedef std::vector< WeightedEdge >             WeightedFaces;
 
     enum class Measure { MU0, MU1, MU2, MUXY1, MUXY2, ALL_MU };
 
@@ -113,7 +115,7 @@ namespace DGtal
     /// Given weighted faces, returns its  mu1 measure.
     Scalar     mu1  ( const WeightedEdges& wedges ) const;
     /// Given weighted faces, returns its  mu2 measure.
-    Scalar     mu2  ( const WeightedEdges& wedges ) const;
+    Scalar     mu2  ( const Vertices&      vertices ) const;
     /// Given weighted faces, returns its  muXY1 measure.
     RealTensor muXY1( const WeightedEdges& wedges ) const;
     /// Given weighted faces, returns its  muXY2 measure.
@@ -125,7 +127,7 @@ namespace DGtal
     Scalars     mu0;
     /// Per-edge mu1 measure (mean curvature).
     Scalars     mu1;
-    /// Per-edge mu2 measure (Gaussian curvature).
+    /// Per-vertex mu2 measure (Gaussian curvature).
     Scalars     mu2;
     /// Per-edge muXY1 measure (2nd fundamental form).
     RealTensors muXY1;
