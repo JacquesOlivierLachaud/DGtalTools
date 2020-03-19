@@ -103,15 +103,19 @@ namespace DGtal
     /// @param right the normal vector at face xba where x is some vertex(ices)
     /// @param left the normal vector at face yab where y is some vertex(ices)
     /// @return the mean curvature according to Normal Cycle formula.
+    ///
+    /// @note JOL: I have to multiply it by 0.25 to get approximately
+    /// the mean curvature.
     static
     Scalar meanCurvature
     ( const RealPoint& a, const RealPoint& b,
       const RealVector& right, const RealVector& left )
     {
       const RealVector diedre = right.crossProduct( left );
-      const Scalar angle = ( diedre.dot( b - a) > 0.0 )
-	? asin( diedre.norm() ) : - asin( diedre.norm() );
-      return ( b - a ).norm() * angle;
+      const Scalar n = std::min( 1.0, std::max( diedre.norm(), 0.0 ) );
+      const Scalar angle = ( diedre.dot( b - a) < 0.0 )
+	? asin( n ) : - asin( n );
+      return 0.25 * ( b - a ).norm() * angle;
     }
 
     /// Computes the Gaussian curvature at point \a a with incident vertices \a vtcs.
@@ -234,7 +238,7 @@ namespace DGtal
     static
     Scalar area( const RealPoint& a, const RealPoint& b, const RealPoint& c )
     {
-      return ( ( b - a ).crossProduct( c - a ) ).norm();
+      return 0.5 * ( ( b - a ).crossProduct( c - a ) ).norm();
     }    
 
     /// Given a vector of unit vectors, returns their average unit vector.

@@ -104,8 +104,8 @@ computeMu1()
   Index idx_e = 0;
   for ( auto e : myMesh.edgeVertices() )
     {
-      const auto & right_faces = myMesh.edgeRightFaces()[ e ];
-      const auto &  left_faces = myMesh.edgeLeftFaces ()[ e ];
+      const auto & right_faces = myMesh.edgeRightFaces()[ idx_e ];
+      const auto &  left_faces = myMesh.edgeLeftFaces ()[ idx_e ];
       if ( right_faces.size() != 1 || left_faces.size() != 1 )
 	localMu1[ idx_e ] = 0.0;
       else
@@ -114,7 +114,7 @@ computeMu1()
 	  const RealPoint        b = myMesh.positions()[ e.second ];
 	  const RealVector right_n = myMesh.faceNormals()[ right_faces[ 0 ] ];
 	  const RealVector  left_n = myMesh.faceNormals()[ left_faces [ 0 ] ];
-	  localMu1[ idx_e ] = meanCurvature( a, b, right_n, left_n );
+	  localMu1[ idx_e ] = Formula::meanCurvature( a, b, right_n, left_n );
 	}
       idx_e++;
     }
@@ -140,7 +140,7 @@ computeMu2()
 	  if ( j != vtcs.size() )
 	    {
 	      const Index prev = ( j + vtcs.size() - 1 ) % vtcs.size();
-	      const Index next = ( j + vtcs.size() - 1 ) % vtcs.size();
+	      const Index next = ( j + vtcs.size() + 1 ) % vtcs.size();
 	      pairs.push_back( myMesh.positions()[ vtcs[ next ] ] );
 	      pairs.push_back( myMesh.positions()[ vtcs[ prev ] ] );
 	    }
@@ -167,8 +167,8 @@ computeMuXY1()
   Index idx_e = 0;
   for ( auto e : myMesh.edgeVertices() )
     {
-      const auto & right_faces = myMesh.edgeRightFaces()[ e ];
-      const auto &  left_faces = myMesh.edgeLeftFaces ()[ e ];
+      const auto & right_faces = myMesh.edgeRightFaces()[ idx_e ];
+      const auto &  left_faces = myMesh.edgeLeftFaces ()[ idx_e ];
       if ( right_faces.size() != 1 || left_faces.size() != 1 )
 	localMuXY1[ idx_e ] = zeroT;
       else
@@ -177,7 +177,8 @@ computeMuXY1()
 	  const RealPoint        b = myMesh.positions()[ e.second ];
 	  const RealVector right_n = myMesh.faceNormals()[ right_faces[ 0 ] ];
 	  const RealVector  left_n = myMesh.faceNormals()[ left_faces [ 0 ] ];
-	  localMuXY1[ idx_e ] = anisotropicCurvatureH1( a, b, right_n, left_n );
+	  localMuXY1[ idx_e ] =
+	    Formula::anisotropicCurvatureH1( a, b, right_n, left_n );
 	}
       idx_e++;
     }
@@ -201,8 +202,8 @@ computeMuXY2()
   Index idx_e = 0;
   for ( auto e : myMesh.edgeVertices() )
     {
-      const auto & right_faces = myMesh.edgeRightFaces()[ e ];
-      const auto &  left_faces = myMesh.edgeLeftFaces ()[ e ];
+      const auto & right_faces = myMesh.edgeRightFaces()[ idx_e ];
+      const auto &  left_faces = myMesh.edgeLeftFaces ()[ idx_e ];
       if ( right_faces.size() != 1 || left_faces.size() != 1 )
 	localMuXY2[ idx_e ] = zeroT;
       else
@@ -211,7 +212,8 @@ computeMuXY2()
 	  const RealPoint        b = myMesh.positions()[ e.second ];
 	  const RealVector right_n = myMesh.faceNormals()[ right_faces[ 0 ] ];
 	  const RealVector  left_n = myMesh.faceNormals()[ left_faces [ 0 ] ];
-	  localMuXY2[ idx_e ] = anisotropicCurvatureH2( a, b, right_n, left_n );
+	  localMuXY2[ idx_e ] =
+	    Formula::anisotropicCurvatureH2( a, b, right_n, left_n );
 	}
       idx_e++;
     }

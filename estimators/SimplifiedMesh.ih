@@ -367,6 +367,17 @@ faceCentroid( Index f ) const
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::RealPoint
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+edgeCentroid( Index e ) const
+{
+  const auto& vtcs = myEdgeVertices[ e ];
+  RealPoint c = myPositions[ vtcs.first ] + myPositions[ vtcs.second ];
+  return c / 2.0;
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalar
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 faceArea( Index f ) const
@@ -402,7 +413,7 @@ computeFacesInclusionsInBall( Scalar r, Index f ) const
     {
       Index current = active.front();
       active.pop();
-      Scalar weight = inclusionRatio( p, r, current );
+      Scalar weight = faceInclusionRatio( p, r, current );
       if ( weight > 0.0 )
 	{
 	  result.push_back( std::make_pair( current, weight ) );
@@ -419,11 +430,76 @@ computeFacesInclusionsInBall( Scalar r, Index f ) const
   // 	       << " #Result=" << result.size() << std::endl;
   return result;
 }
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+std::tuple
+< typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Vertices,
+  typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::WeightedEdges,
+  typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::WeightedFaces > 
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+computeCellsInclusionsInBall( Scalar r, Index f ) const
+{
+  Vertices      result_v;
+  std::set<Vertex> set_v;
+  WeightedEdges result_e;
+  WeightedFaces result_f;
+  if ( r < 0.000001 )
+    {
+      result_f.push_back( std::make_pair( f, 0.000001 ) );
+      return std::make_tuple( result_v, result_e, result_f );
+    }
+  RealPoint p = faceCentroid( f );
+  std::set< Index > marked;
+  std::queue< Index > active;
+  active.push( f );
+  marked.insert( f );
+  while ( ! active.empty() )
+    {
+      Index current = active.front();
+      active.pop();
+      Scalar fweight = faceInclusionRatio( p, r, current );
+      if ( fweight > 0.0 )
+	{
+	  result_f.push_back( std::make_pair( current, fweight ) );
+	  // Taking care of faces, and the breadth-first traversal
+	  const auto& neighbors = myNeighborFaces[ current ];
+	  for ( auto n : neighbors )
+	    if ( marked.find( n ) == marked.end() )
+	      {
+		active.push( n );
+		marked.insert( n );
+	      }
+	  // Taking care of edges and vertices
+	  const auto& inc_v = myIncidentVertices[ current ];
+	  for ( Size i = 0; i < inc_v.size(); ++i )
+	    {
+	      const Vertex vi = inc_v[ i ];
+	      const Vertex vn = inc_v[ (i+1) % inc_v.size() ];
+	      if ( vertexInclusionRatio( p, r, vi ) > 0.0 )
+		set_v.insert( vi );
+	      const Edge e_ij = makeEdge( vi, vn );
+	      if ( e_ij >= nbEdges() ) {
+		trace.error() << "bad edge " << vi << " " << vn << std::endl;
+		continue;
+	      }
+	      Scalar eweight = edgeInclusionRatio( p, r, e_ij );
+	      if ( eweight > 0.0 )
+		result_e.push_back( std::make_pair( e_ij, eweight ) );
+	    }
+	}
+    }
+  // trace.info() << "#Marked=" << marked.size()
+  // 	       << " #Result=" << result.size() << std::endl;
+  result_v = Vertices( set_v.cbegin(), set_v.cend() );
+  return std::make_tuple( result_v, result_e, result_f );
+}
+
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
 typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalar
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
-inclusionRatio( RealPoint p, Scalar r, Index f ) const
+faceInclusionRatio( RealPoint p, Scalar r, Index f ) const
 {
   const auto vertices = myIncidentVertices[ f ];
   const RealPoint   b = faceCentroid( f );
@@ -438,6 +514,35 @@ inclusionRatio( RealPoint p, Scalar r, Index f ) const
   if      ( d_max <= r     ) return 1.0;
   else if ( r     <= d_min ) return 0.0;
   return ( r - d_min ) / ( d_max - d_min );
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalar
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+edgeInclusionRatio( RealPoint p, Scalar r, Index e ) const
+{
+  const auto vertices = myEdgeVertices[ e ];
+  const RealPoint   b = edgeCentroid( e );
+  const Scalar     d0 = ( myPositions[ vertices.first ] - p ).norm();
+  const Scalar     d1 = ( myPositions[ vertices.second ] - p ).norm();
+  Scalar        d_min = ( b - p ).norm();
+  Scalar        d_max = d_min;
+  d_max = std::max( d_max, std::max( d0, d1 ) );
+  d_min = std::min( d_min, std::min( d0, d1 ) );
+  if      ( d_max <= r     ) return 1.0;
+  else if ( r     <= d_min ) return 0.0;
+  return ( r - d_min ) / ( d_max - d_min );
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalar
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+vertexInclusionRatio( RealPoint p, Scalar r, Index v ) const
+{
+  const RealPoint   b = myPositions[ v ];
+  return ( ( b - p ).norm() <= r ) ? 1.0 : 0.0;
 }
 
 

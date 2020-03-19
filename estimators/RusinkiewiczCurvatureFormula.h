@@ -313,7 +313,7 @@ namespace DGtal
     static
     Scalar area( const RealPoint& a, const RealPoint& b, const RealPoint& c )
     {
-      return ( ( b - a ).crossProduct( c - a ) ).norm();
+      return 0.5 * ( ( b - a ).crossProduct( c - a ) ).norm();
     }    
 
     /// Given a vector of unit vectors, returns their average unit vector.

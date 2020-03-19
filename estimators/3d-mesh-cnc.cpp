@@ -264,6 +264,7 @@ struct CurvatureComputer
   typedef SH::DigitalSurface                    DigitalSurface;
   typedef SH::IdxDigitalSurface                 IdxDigitalSurface;
   typedef CorrectedNormalCurrentComputer< RealPoint, RealVector > CNCComputer;
+  typedef NormalCycleComputer< RealPoint, RealVector > NCComputer;
   typedef CNCComputer::Scalars                  Scalars;
   typedef CNCComputer::RealTensors              RealTensors;
   typedef std::vector< RealPoint >              RealPoints;
@@ -290,6 +291,8 @@ struct CurvatureComputer
   bool computeInterpolatedCorrectedNormalCurrent();
   /// Compute Rusinkiewicz curvatures
   bool computeRusinkiewiczCurvatures();
+  /// Computes normal cycle for estimating curvatures
+  bool computeNormalCycle();
 
   /// If face or vertex curvatures are not computed, interpolate them
   /// from the others.
@@ -862,7 +865,7 @@ CurvatureComputer::CurvatureComputer()
   EH::optionsNoisyImage      ( general_opt );
   EH::optionsNormalEstimators( general_opt );
   general_opt.add_options()
-    ( "quantity,Q", po::value<std::string>()->default_value( "CNC" ), "the method that computes curvature quantities: CNC|RZ" )
+    ( "quantity,Q", po::value<std::string>()->default_value( "CNC" ), "the method that computes curvature quantities: CNC|RZ|NC" )
     ( "anisotropy", po::value<std::string>()->default_value( "NAdd" ), "tells how is symmetrized the anisotropic measure mu_XY, in Mult|Add|NMult|NAdd: Mult forces symmetry by M*M^t, Add forces symmetry by 0.5*(M+M^t)+NxN, NMult and NAdd normalized by the area.");
     // ( "quantity,Q", po::value<std::string>()->default_value( "H" ), "the quantity that is evaluated in Mu0|Mu1|Mu2|MuOmega|H|G|Omega|MuXY|HII|GII, with H := Mu1/(2Mu0), G := Mu2/Mu0, Omega := MuOmega/sqrt(Mu0), MuXY is the anisotropic curvature tensor and HII and GII are the mean and gaussian curvatures estimated by II." )
   //   ( "crisp,C", "when specified, when computing measures in a ball, do not approximate the relative intersection of cells with the ball but only consider if the cell centroid is in the ball (faster by 30%, but less accurate)." )
@@ -956,7 +959,7 @@ CurvatureComputer::parseCommandLine( int argc, char** argv )
   h          = vm[ "gridstep" ].as<double>();
   quantity   = vm[ "quantity"   ].as<std::string>();
   anisotropy = vm[ "anisotropy" ].as<std::string>();
-  std::vector< std::string > quantities = { "CNC", "RZ" };
+  std::vector< std::string > quantities = { "CNC", "RZ", "NC" };
     //{ "Mu0", "Mu1", "Mu2", "MuOmega", "H", "G", "Omega", "MuXY", "HII", "GII" };
   if ( std::count( quantities.begin(), quantities.end(), quantity ) == 0 ) {
     trace.error() << "Quantity should be in CNC|RZ";
@@ -1406,6 +1409,8 @@ CurvatureComputer::computeCurvatures()
     ok = computeInterpolatedCorrectedNormalCurrent();
   else if ( quantity == "RZ" )
     ok = computeRusinkiewiczCurvatures();
+  else if ( quantity == "NC" )
+    ok = computeNormalCycle();
   if ( ! ok ) return false;
   stat_measured_H_curv.addValues( measured_H_face_values.cbegin(),
 				  measured_H_face_values.cend() );
@@ -1517,6 +1522,82 @@ CurvatureComputer::computeRusinkiewiczCurvatures()
 
   return true;
 }
+
+/////////////////////////////////////////////////////////////////////////////
+// Compute normal cycle  measures
+/////////////////////////////////////////////////////////////////////////////
+bool
+CurvatureComputer::computeNormalCycle()
+{
+  // Compute local normal cycle measures
+  trace.beginBlock( "Compute local normal cycle measures" );
+  NCComputer nc( smesh );
+  nc.computeMeasures( NCComputer::Measure::ALL_MU );
+  {
+    double G = 0.0;
+    int nb_nan = 0;
+    for ( auto g : nc.localMu2 ) {
+      if ( ! isnan( g ) ) G += g;
+      else nb_nan++;
+    }
+    trace.info() << nb_nan << " / " << nc.localMu2.size() << " NaN mu2" << std::endl;
+    trace.info() << "Total Gauss curvature G=" << G << std::endl;
+  }
+  {
+    int nb_nan = 0;
+    for ( auto g : nc.localMu1 ) {
+      if ( isnan( g ) ) nb_nan++;
+    }
+    trace.info() << nb_nan << " / " << nc.localMu1.size() << " NaN mu1" << std::endl;
+  }
+  {
+    int nb_nan = 0;
+    for ( auto g : nc.localMu0 ) {
+      if ( isnan( g ) ) nb_nan++;
+    }
+    trace.info() << nb_nan << " / " << nc.localMu0.size() << " NaN mu0" << std::endl;
+  }
+  time_mu_estimations = trace.endBlock();
+
+  // Compute CNC measures within balls
+  trace.beginBlock( "Computes Normal cycle measures within balls" );
+  const double mcoef = vm[ "m-coef"    ].as<double>();
+  const double mpow  = vm[ "m-pow"     ].as<double>();
+  const double mr    = mcoef * pow( h, mpow );
+  trace.info() << "measuring ball radius = " << mr << std::endl;
+  measured_ball_mu0.resize ( smesh.nbFaces() );
+  measured_ball_mu1.resize ( smesh.nbFaces() );
+  measured_ball_mu2.resize ( smesh.nbFaces() );
+  measured_ball_muXY.resize( smesh.nbFaces() );
+  for ( int f = 0; f < smesh.nbFaces(); ++f )
+    {
+      trace.progressBar( f, smesh.nbFaces() );
+      auto v_we_wf = smesh.computeCellsInclusionsInBall( mr, f );
+      measured_ball_mu0 [ f ] = nc.mu0  ( std::get<2>( v_we_wf ) );
+      measured_ball_mu1 [ f ] = nc.mu1  ( std::get<1>( v_we_wf ) );
+      measured_ball_mu2 [ f ] = nc.mu2  ( std::get<0>( v_we_wf ) );
+      measured_ball_muXY[ f ] = nc.muXY1( std::get<1>( v_we_wf ) );
+    }
+  time_curv_estimations = trace.endBlock();
+
+  trace.beginBlock( "Computes curvatures from local Normal Cycle measures" );
+  measured_H_face_values.resize( smesh.nbFaces() );
+  measured_G_face_values.resize( smesh.nbFaces() );
+  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
+    {
+      if ( isnan( measured_ball_mu0[ i ] ) )
+        trace.warning() << "At face " << i << " mu0 is NaN." << std::endl;
+      measured_H_face_values[ i ] = measured_ball_mu0[ i ] != 0
+	? measured_ball_mu1[ i ] / measured_ball_mu0[ i ]
+	: 0.0;
+      measured_G_face_values[ i ] = measured_ball_mu0[ i ] != 0
+	? measured_ball_mu2[ i ] / measured_ball_mu0[ i ]
+	: 0.0;
+    }
+  trace.endBlock();
+  return true;
+}  
+
 
 /////////////////////////////////////////////////////////////////////////////
 /// If vertex or face curvatures are not computed, compute them from

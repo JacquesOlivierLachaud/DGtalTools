@@ -78,11 +78,13 @@ namespace DGtal
     typedef Index                                   Face;
     typedef Index                                   Edge;
     typedef Index                                   Vertex;
+    typedef std::pair< Edge, Scalar >               WeightedEdge;
     typedef std::pair< Face, Scalar >               WeightedFace;
-    typedef std::pair< Vertex, Scalar >             WeightedVertex;
     /// The type that defines a range of vertices
     typedef std::vector< Vertex >                   Vertices;
     /// The type that defines a range of faces
+    typedef std::vector< Edge >                     Edges;
+    typedef std::vector< WeightedEdge >             WeightedEdges;
     typedef std::vector< Face >                     Faces;
     typedef std::vector< WeightedFace >             WeightedFaces;
     typedef std::pair< Vertex, Vertex >             VertexPair;
@@ -263,6 +265,10 @@ namespace DGtal
     void perturbateWithUniformRandomNoise( Scalar p );
     void perturbateWithAdaptiveUniformRandomNoise( Scalar p );
 
+    /// @param e any valid edge index.
+    /// @return the centroid (or barycenter) of edge \a f.
+    RealPoint edgeCentroid( Index e ) const;
+
     /// @param f any valid face index.
     /// @return the centroid (or barycenter) of face \a f.
     RealPoint faceCentroid( Index f ) const;
@@ -278,6 +284,8 @@ namespace DGtal
     
     WeightedFaces
     computeFacesInclusionsInBall( Scalar r, Index f ) const;
+    std::tuple< Vertices, WeightedEdges, WeightedFaces >
+    computeCellsInclusionsInBall( Scalar r, Index f ) const;
     
     /// Computes an approximation of the inclusion ratio of a given
     /// face \a f with a ball of radius \a r and center \a p.
@@ -288,7 +296,29 @@ namespace DGtal
     ///
     /// @return the inclusion ratio as a scalar between 0 (no
     /// intersection) and 1 (inclusion).
-    Scalar inclusionRatio( RealPoint p, Scalar r, Index f ) const;
+    Scalar faceInclusionRatio( RealPoint p, Scalar r, Index f ) const;
+
+    /// Computes an approximation of the inclusion ratio of a given
+    /// edge \a e with a ball of radius \a r and center \a p.
+    ///
+    /// @param p the center of the ball.
+    /// @param r the radius of the ball.
+    /// @param e any index of edge.
+    ///
+    /// @return the inclusion ratio as a scalar between 0 (no
+    /// intersection) and 1 (inclusion).
+    Scalar edgeInclusionRatio( RealPoint p, Scalar r, Index e ) const;
+
+    /// Computes the inclusion ratio of a given
+    /// vertex \a v with a ball of radius \a r and center \a p.
+    ///
+    /// @param p the center of the ball.
+    /// @param r the radius of the ball.
+    /// @param v any index of vertex.
+    ///
+    /// @return the inclusion ratio as a scalar, either 0 (no
+    /// intersection) or 1 (inclusion).
+    Scalar vertexInclusionRatio( RealPoint p, Scalar r, Index v ) const;
 
     /// @}
     
