@@ -269,6 +269,7 @@ struct CurvatureComputer
   typedef CNCComputer::RealTensors              RealTensors;
   typedef std::vector< RealPoint >              RealPoints;
   typedef std::vector< RealVector >             RealVectors;
+
   /// Creates the object with the meaningful options.
   CurvatureComputer();
   /// Parses command-line options.
@@ -276,8 +277,11 @@ struct CurvatureComputer
 
   /// Build input from data for further processing.
   bool buildInput();
+  /// Build inputs from implicit polynomial shapes or 3D .vol image file.
   bool buildPolynomialOrVolInput();
+  /// Build inputs from a set of predefined meshes
   bool buildPredefinedMesh();
+  /// Build inputs from a polygonal mesh .obj file
   bool buildObjInput();
 
   /// Perturbates positions
@@ -301,6 +305,9 @@ struct CurvatureComputer
   bool outputMeasuresAsMeshObj();
   /// Output errors (G, H, etc) as mesh OBJ files
   bool outputErrorsAsMeshObj();
+
+  //---------------------------------------------------------------------------
+public:
   
   /// Meaningful options for this object.
   po::options_description general_opt;
@@ -337,26 +344,52 @@ struct CurvatureComputer
   bool blocky;
   bool dual;
   
-  /// Stores expected Gaussian curvature values (if applicable)
-  SH::Scalars       expected_G_face_values;
-  /// Stores measured Gaussian curvature values (if applicable)
-  SH::Scalars       measured_G_face_values;
-  /// Stores expected Gaussian curvature values (if applicable)
-  SH::Scalars       expected_G_vertex_values;
-  /// Stores measured Gaussian curvature values (if applicable)
-  SH::Scalars       measured_G_vertex_values;
-  /// Stores expected mean curvature values (if applicable)
-  SH::Scalars       expected_H_face_values;
-  /// Stores measured mean curvature values (if applicable)
-  SH::Scalars       measured_H_face_values;
-  /// Stores expected mean curvature values (if applicable)
-  SH::Scalars       expected_H_vertex_values;
-  /// Stores measured mean curvature values (if applicable)
-  SH::Scalars       measured_H_vertex_values;
   /// Stores expected normal vectors (if applicable)
   SH::RealVectors   expected_normals;
+  /// Stores expected mean curvature values (if applicable)
+  SH::Scalars       expected_H_face_values;
+  /// Stores expected mean curvature values (if applicable)
+  SH::Scalars       expected_H_vertex_values;
+  /// Stores expected Gaussian curvature values (if applicable)
+  SH::Scalars       expected_G_face_values;
+  /// Stores expected Gaussian curvature values (if applicable)
+  SH::Scalars       expected_G_vertex_values;
+  /// Stores expected first (smallest) principal curvature values (if applicable)
+  SH::Scalars       expected_K1_face_values;
+  /// Stores expected second (greatest) principal curvature values (if applicable)
+  SH::Scalars       expected_K2_face_values;
+  /// Stores expected first (smallest) principal direction values (if applicable)
+  SH::RealVectors   expected_D1_face_values;
+  /// Stores expected second (greatest) principal direction values (if applicable)
+  SH::RealVectors   expected_D2_face_values;
+  /// Stores expected first (smallest) principal curvature values (if applicable)
+  SH::Scalars       expected_K1_vertex_values;
+  /// Stores expected second (greatest) principal curvature values (if applicable)
+  SH::Scalars       expected_K2_vertex_values;
+  /// Stores expected first (smallest) principal direction values (if applicable)
+  SH::RealVectors   expected_D1_vertex_values;
+  /// Stores expected second (greatest) principal direction values (if applicable)
+  SH::RealVectors   expected_D2_vertex_values;
+
+  /// Stores measured mean curvature values (if applicable)
+  SH::Scalars       measured_H_face_values;
+  /// Stores measured mean curvature values (if applicable)
+  SH::Scalars       measured_H_vertex_values;
+  /// Stores measured Gaussian curvature values (if applicable)
+  SH::Scalars       measured_G_face_values;
+  /// Stores measured Gaussian curvature values (if applicable)
+  SH::Scalars       measured_G_vertex_values;
   /// Stores measured normal vectors (if applicable)
   SH::RealVectors   measured_normals;
+  /// Stores measured first (smallest) principal curvature values (if applicable)
+  SH::Scalars       measured_K1_face_values;
+  /// Stores measured second (greatest) principal curvature values (if applicable)
+  SH::Scalars       measured_K2_face_values;
+  /// Stores measured first (smallest) principal direction values (if applicable)
+  SH::RealVectors   measured_D1_face_values;
+  /// Stores measured second (greatest) principal direction values (if applicable)
+  SH::RealVectors   measured_D2_face_values;
+
   /// Provides statistics on expected Gaussian curvatures (if applicable)
   Statistic<double> stat_expected_G_curv;
   /// Provides statistics on measured Gaussian curvatures (if applicable)
@@ -1086,6 +1119,10 @@ CurvatureComputer::buildPolynomialOrVolInput()
   /////////////////////////////////////////////////////////////////////////////
   SH::Scalars expected_H_values;
   SH::Scalars expected_G_values;
+  SH::Scalars expected_K1_values;
+  SH::Scalars expected_K2_values;
+  SH::RealVectors expected_D1_values;
+  SH::RealVectors expected_D2_values;
   trace.beginBlock( "Compute surfels" );
   params( "surfaceTraversal", "Default" );
   const auto     surfels = ( surface != nullptr )
@@ -1097,6 +1134,10 @@ CurvatureComputer::buildPolynomialOrVolInput()
       trace.beginBlock( "Compute true curvatures" );
       expected_H_values = SHG::getMeanCurvatures( shape, K, surfels, params );
       expected_G_values = SHG::getGaussianCurvatures( shape, K, surfels, params );
+      expected_K1_values= SHG::getFirstPrincipalCurvatures( shape, K, surfels, params );
+      expected_K2_values= SHG::getSecondPrincipalCurvatures( shape, K, surfels, params );
+      expected_D1_values= SHG::getFirstPrincipalDirections( shape, K, surfels, params );
+      expected_D2_values= SHG::getSecondPrincipalDirections( shape, K, surfels, params );
       stat_expected_H_curv.addValues( expected_H_values.cbegin(),
 				      expected_H_values.cend() );
       stat_expected_G_curv.addValues( expected_G_values.cbegin(),
@@ -1222,6 +1263,14 @@ CurvatureComputer::buildPolynomialOrVolInput()
 	  expected_H_face_values   = smesh.computeFaceValuesFromVertexValues( expected_H_values );
 	  expected_G_vertex_values = expected_G_values;
 	  expected_G_face_values   = smesh.computeFaceValuesFromVertexValues( expected_G_values );
+	  expected_K1_vertex_values= expected_K1_values;
+	  expected_K1_face_values  = smesh.computeFaceValuesFromVertexValues( expected_K1_values );
+	  expected_K2_vertex_values= expected_K2_values;
+	  expected_K2_face_values  = smesh.computeFaceValuesFromVertexValues( expected_K2_values );
+	  expected_D1_vertex_values= expected_D1_values;
+	  expected_D1_face_values  = smesh.computeFaceUnitVectorsFromVertexUnitVectors( expected_D1_values );
+	  expected_D2_vertex_values= expected_D2_values;
+	  expected_D2_face_values  = smesh.computeFaceUnitVectorsFromVertexUnitVectors( expected_D2_values );
 	}
       else
 	{
@@ -1229,6 +1278,14 @@ CurvatureComputer::buildPolynomialOrVolInput()
 	  expected_H_face_values   = expected_H_values;
 	  expected_G_vertex_values = smesh.computeVertexValuesFromFaceValues( expected_G_values );
 	  expected_G_face_values   = expected_G_values;
+	  expected_K1_vertex_values= smesh.computeVertexValuesFromFaceValues( expected_K1_values );
+	  expected_K1_face_values  = expected_K1_values;
+	  expected_K2_vertex_values= smesh.computeVertexValuesFromFaceValues( expected_K2_values );
+	  expected_K2_face_values  = expected_K2_values;
+	  expected_D1_vertex_values= smesh.computeVertexUnitVectorsFromFaceUnitVectors( expected_D1_values );
+	  expected_D1_face_values  = expected_D1_values;
+	  expected_D2_vertex_values= smesh.computeVertexUnitVectorsFromFaceUnitVectors( expected_D2_values );
+	  expected_D2_face_values  = expected_D2_values;
 	}
     }
   trace.endBlock();
@@ -1671,30 +1728,6 @@ CurvatureComputer::outputMeasuresAsMeshObj()
       okw = SimpleMeshWriter::writeIsoLinesOBJ
        	( output_basefile+"-G-zero", smesh,
 	  measured_G_face_values, measured_G_vertex_values, 0.0, zt );
-      // auto edge_predicate_H = [&] ( SH::Idx e )
-      // 	{
-      // 	  auto faces = smesh.edgeFaces()[ e ];
-      // 	  bool inf_zero = false;
-      // 	  bool sup_zero = false;
-      // 	  for ( auto f : faces )
-      // 	    if ( measured_H_face_values[ f ] < 0.0 ) inf_zero = true;
-      // 	    else sup_zero = true;
-      // 	  return inf_zero && sup_zero;
-      // 	};
-      // okw = SimpleMeshWriter::writeEdgeLinesOBJ
-      // 	( output_basefile+"-H-zero", smesh, edge_predicate_H, zt );
-      // auto edge_predicate_G = [&] ( SH::Idx e )
-      // 	{
-      // 	  auto faces = smesh.edgeFaces()[ e ];
-      // 	  bool inf_zero = false;
-      // 	  bool sup_zero = false;
-      // 	  for ( auto f : faces )
-      // 	    if ( measured_G_face_values[ f ] < 0.0 ) inf_zero = true;
-      // 	    else sup_zero = true;
-      // 	  return inf_zero && sup_zero;
-      // 	};
-      // okw = SimpleMeshWriter::writeEdgeLinesOBJ
-      // 	( output_basefile+"-G-zero", smesh, edge_predicate_G, zt );
     }
   trace.endBlock();
   return okw;

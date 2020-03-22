@@ -160,6 +160,12 @@ namespace DGtal
     template <typename AnyRing>
     std::vector<AnyRing> computeVertexValuesFromFaceValues
     ( const std::vector<AnyRing>& fvalues ) const;
+
+    std::vector<RealVector> computeFaceUnitVectorsFromVertexUnitVectors
+    ( const std::vector<RealVector>& vuvectors ) const;
+
+    std::vector<RealVector> computeVertexUnitVectorsFromFaceUnitVectors
+    ( const std::vector<RealVector>& fuvectors ) const;
     
     /// @}
 
@@ -536,6 +542,7 @@ namespace DGtal
     typedef DGtal::SimplifiedMesh< RealPoint, RealVector > SimplifiedMesh;
     typedef typename RealVector::Component          Scalar;
     typedef std::vector<Scalar>                     Scalars;
+    typedef std::vector<RealVector>                 RealVectors;
     typedef typename SimplifiedMesh::Size           Size;
     typedef typename SimplifiedMesh::Index          Index;
     typedef typename SimplifiedMesh::Vertices       Vertices;
@@ -554,13 +561,29 @@ namespace DGtal
     Scalars sphereGaussianCurvatures( Scalar radius, Size m, Size n );
 
     static
+    Scalars sphereFirstPrincipalCurvatures( Scalar radius, Size m, Size n );
+    static
+    Scalars sphereSecondPrincipalCurvatures( Scalar radius, Size m, Size n );
+    static
+    RealVectors sphereFirstPrincipalDirections( Scalar radius, Size m, Size n );
+    static
+    RealVectors sphereSecondPrincipalDirections( Scalar radius, Size m, Size n );
+
+    static
     SimplifiedMesh makeLantern( Scalar radius, Scalar height, RealPoint center,
 				Size m, Size n, Normals normals );
     static
     Scalars lanternMeanCurvatures( Scalar radius, Size m, Size n );
-    
     static
     Scalars lanternGaussianCurvatures( Scalar radius, Size m, Size n );
+    static
+    Scalars lanternFirstPrincipalCurvatures( Scalar radius, Size m, Size n );
+    static
+    Scalars lanternSecondPrincipalCurvatures( Scalar radius, Size m, Size n );
+    static
+    RealVectors lanternFirstPrincipalDirections( Scalar radius, Size m, Size n );
+    static
+    RealVectors lanternSecondPrincipalDirections( Scalar radius, Size m, Size n );
 
     static
     SimplifiedMesh makeTorus( Scalar big_radius, Scalar small_radius, RealPoint center,
@@ -572,6 +595,18 @@ namespace DGtal
     static
     Scalars torusGaussianCurvatures( Scalar big_radius, Scalar small_radius, 
 				     Size m, Size n, int twist );
+    static
+    Scalars torusFirstPrincipalCurvatures( Scalar big_radius, Scalar small_radius, 
+					   Size m, Size n, int twist );
+    static
+    Scalars torusSecondPrincipalCurvatures( Scalar big_radius, Scalar small_radius, 
+					    Size m, Size n, int twist );
+    static
+    RealVectors torusFirstPrincipalDirections( Scalar big_radius, Scalar small_radius, 
+					       Size m, Size n, int twist );
+    static
+    RealVectors torusSecondPrincipalDirections( Scalar big_radius, Scalar small_radius, 
+						Size m, Size n, int twist );
     
   };
   
