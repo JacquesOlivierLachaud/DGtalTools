@@ -265,6 +265,7 @@ struct CurvatureComputer
   typedef SH::IdxDigitalSurface                 IdxDigitalSurface;
   typedef CorrectedNormalCurrentComputer< RealPoint, RealVector > CNCComputer;
   typedef NormalCycleComputer< RealPoint, RealVector > NCComputer;
+  typedef CNCComputer::Scalar                   Scalar;
   typedef CNCComputer::Scalars                  Scalars;
   typedef CNCComputer::RealTensors              RealTensors;
   typedef std::vector< RealPoint >              RealPoints;
@@ -297,6 +298,9 @@ struct CurvatureComputer
   bool computeRusinkiewiczCurvatures();
   /// Computes normal cycle for estimating curvatures
   bool computeNormalCycle();
+  /// Compute all curvatures from curvature measures, i.e. localize
+  /// measure computations.
+  bool computeCurvaturesFromMeasures();
 
   /// If face or vertex curvatures are not computed, interpolate them
   /// from the others.
@@ -1567,21 +1571,7 @@ CurvatureComputer::computeInterpolatedCorrectedNormalCurrent()
     }
   time_curv_estimations = trace.endBlock();
 
-  trace.beginBlock( "Computes curvatures from CNC measures" );
-  measured_H_face_values.resize( smesh.nbFaces() );
-  measured_G_face_values.resize( smesh.nbFaces() );
-  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
-    {
-      if ( isnan( measured_ball_mu0[ i ] ) )
-        trace.warning() << "At face " << i << " mu0 is NaN." << std::endl;
-      measured_H_face_values[ i ] = measured_ball_mu0[ i ] != 0
-	? measured_ball_mu1[ i ] / measured_ball_mu0[ i ]
-	: 0.0;
-      measured_G_face_values[ i ] = measured_ball_mu0[ i ] != 0
-	? measured_ball_mu2[ i ] / measured_ball_mu0[ i ]
-	: 0.0;
-    }
-  trace.endBlock();
+  computeCurvaturesFromMeasures();
   return true;
 }  
 
@@ -1678,21 +1668,7 @@ CurvatureComputer::computeNormalCycle()
     }
   time_curv_estimations = trace.endBlock();
 
-  trace.beginBlock( "Computes curvatures from local Normal Cycle measures" );
-  measured_H_face_values.resize( smesh.nbFaces() );
-  measured_G_face_values.resize( smesh.nbFaces() );
-  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
-    {
-      if ( isnan( measured_ball_mu0[ i ] ) )
-        trace.warning() << "At face " << i << " mu0 is NaN." << std::endl;
-      measured_H_face_values[ i ] = measured_ball_mu0[ i ] != 0
-	? measured_ball_mu1[ i ] / measured_ball_mu0[ i ]
-	: 0.0;
-      measured_G_face_values[ i ] = measured_ball_mu0[ i ] != 0
-	? measured_ball_mu2[ i ] / measured_ball_mu0[ i ]
-	: 0.0;
-    }
-  trace.endBlock();
+  computeCurvaturesFromMeasures();
   return true;
 }  
 
@@ -1722,6 +1698,51 @@ CurvatureComputer::computeVertexFaceCurvatures()
   else if ( ! measured_G_vertex_values.empty() )
     measured_G_face_values
       = smesh.computeFaceValuesFromVertexValues( measured_G_vertex_values );
+  return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+/// Compute all curvatures from curvature measures, i.e. localize
+/// measure computations.
+/////////////////////////////////////////////////////////////////////////////
+bool
+CurvatureComputer::computeCurvaturesFromMeasures()
+{
+  trace.beginBlock( "Computes curvatures from CNC/NC measures" );
+  measured_H_face_values.resize( smesh.nbFaces() );
+  measured_G_face_values.resize( smesh.nbFaces() );
+  measured_K1_face_values.resize( smesh.nbFaces() );
+  measured_K2_face_values.resize( smesh.nbFaces() );
+  measured_D1_face_values.resize( smesh.nbFaces() );
+  measured_D2_face_values.resize( smesh.nbFaces() );
+  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
+    {
+      if ( isnan( measured_ball_mu0[ i ] ) )
+        trace.warning() << "At face " << i << " mu0 is NaN." << std::endl;
+      Scalar area = measured_ball_mu0[ i ];
+      // Computing mean curvature H
+      measured_H_face_values[ i ] = area != 0.0	? measured_ball_mu1[ i ] / area	: 0.0;
+      // Computing Gaussian curvature H
+      measured_G_face_values[ i ] = area != 0.0	? measured_ball_mu2[ i ] / area	: 0.0;
+      // Computing principal curvatures k1 and k2
+      auto M = measured_ball_muXY[ i ];
+      auto N = measured_normals[ i ];
+      M += M.transpose();
+      M *= 0.5;
+      const double   coef_N = 1000.0 * area;
+      // Adding 1000 area n x n to anisotropic measure
+      for ( int j = 0; j < 3; j++ )
+	for ( int k = 0; k < 3; k++ )
+	  M( j, k ) += coef_N * N[ j ] * N[ k ];
+      auto V = M;
+      RealVector L;
+      EigenDecomposition< 3, double>::getEigenDecomposition( M, V, L );
+      measured_D1_face_values[ i ] = V.column( 0 );
+      measured_D2_face_values[ i ] = V.column( 1 );
+      measured_K1_face_values[ i ] = area != 0.0 ? -L[ 0 ] / area : 0.0;
+      measured_K2_face_values[ i ] = area != 0.0 ? -L[ 1 ] / area : 0.0;
+    }
+  trace.endBlock();
   return true;
 }
 
