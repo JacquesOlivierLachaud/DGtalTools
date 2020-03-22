@@ -1261,7 +1261,7 @@ sphereFirstPrincipalDirections( Scalar radius, Size m, Size n )
   // (n-1)*m+1 --  n*m: before last row
   //     n*m+1        : top pole    
   const Size nbv = 2 + n * m;
-  std::vector< RealVectors > d1( nbv ); // directions
+  std::vector< RealVector > d1( nbv ); // directions
   d1[     0 ] = RealVector( 0.0, 1.0, 0.0 );
   d1[ m*n+1 ] = RealVector( 0.0, 1.0, 0.0 );
   const auto fv = [n] (Size i, Size j) { return i * n + j + (Size)1; };
@@ -1292,7 +1292,7 @@ sphereSecondPrincipalDirections( Scalar radius, Size m, Size n )
   // (n-1)*m+1 --  n*m: before last row
   //     n*m+1        : top pole    
   const Size nbv = 2 + n * m;
-  std::vector< RealVectors > d2( nbv ); // directions
+  std::vector< RealVector > d2( nbv ); // directions
   d2[     0 ] = RealVector( 1.0, 0.0, 0.0 );
   d2[ m*n+1 ] = RealVector( -1.0, 0.0, 0.0 );
   const auto fv = [n] (Size i, Size j) { return i * n + j + (Size)1; };

@@ -1301,7 +1301,8 @@ bool
 CurvatureComputer::buildPredefinedMesh()
 {
   ASSERT( in_mesh );
-  Scalars exp_H, exp_G;
+  Scalars exp_H, exp_G, exp_K1, exp_K2;
+  RealVectors exp_D1, exp_D2;
   trace.beginBlock( "Build predefined parametric mesh" );
   if ( meshargs.size() >= 4
        && ( meshname == "sphere" || meshname == "sphere-VN"
@@ -1318,6 +1319,10 @@ CurvatureComputer::buildPredefinedMesh()
         ::makeSphere( r, RealPoint(), m, n, normals );
       exp_H = SimpleMeshHelper::sphereMeanCurvatures    ( r, m, n );
       exp_G = SimpleMeshHelper::sphereGaussianCurvatures( r, m, n );
+      exp_K1= SimpleMeshHelper::sphereFirstPrincipalCurvatures ( r, m, n );
+      exp_K2= SimpleMeshHelper::sphereSecondPrincipalCurvatures( r, m, n );
+      exp_D1= SimpleMeshHelper::sphereFirstPrincipalDirections ( r, m, n );
+      exp_D2= SimpleMeshHelper::sphereSecondPrincipalDirections( r, m, n );
     }
   else if ( meshargs.size() >= 5 
 	    && ( meshname == "lantern" || meshname == "lantern-VN"
@@ -1335,6 +1340,10 @@ CurvatureComputer::buildPredefinedMesh()
         ::makeLantern( r, h, RealPoint(), m, n, normals );
       exp_H = SimpleMeshHelper::lanternMeanCurvatures    ( r, m, n );
       exp_G = SimpleMeshHelper::lanternGaussianCurvatures( r, m, n );
+      exp_K1= SimpleMeshHelper::lanternFirstPrincipalCurvatures ( r, m, n );
+      exp_K2= SimpleMeshHelper::lanternSecondPrincipalCurvatures( r, m, n );
+      exp_D1= SimpleMeshHelper::lanternFirstPrincipalDirections ( r, m, n );
+      exp_D2= SimpleMeshHelper::lanternSecondPrincipalDirections( r, m, n );
     }
   else if ( meshargs.size() >= 5 
 	    && ( meshname == "torus" || meshname == "torus-VN"
@@ -1353,6 +1362,10 @@ CurvatureComputer::buildPredefinedMesh()
         ::makeTorus( R, r, RealPoint(), m, n, twist, normals );
       exp_H = SimpleMeshHelper::torusMeanCurvatures    ( R, r, m, n, twist );
       exp_G = SimpleMeshHelper::torusGaussianCurvatures( R, r, m, n, twist );
+      exp_K1= SimpleMeshHelper::torusFirstPrincipalCurvatures ( R, r, m, n, twist );
+      exp_K2= SimpleMeshHelper::torusSecondPrincipalCurvatures( R, r, m, n, twist );
+      exp_D1= SimpleMeshHelper::torusFirstPrincipalDirections ( R, r, m, n, twist );
+      exp_D2= SimpleMeshHelper::torusSecondPrincipalDirections( R, r, m, n, twist );
     }
   else
     in_mesh = false;
@@ -1371,6 +1384,34 @@ CurvatureComputer::buildPredefinedMesh()
       } else {
 	expected_G_face_values   = exp_G;
 	expected_G_vertex_values = smesh.computeVertexValuesFromFaceValues( exp_G );
+      }
+      if ( exp_K1.size() == smesh.nbVertices() )	{
+	  expected_K1_face_values   = smesh.computeFaceValuesFromVertexValues( exp_K1 );
+	  expected_K1_vertex_values = exp_K1;
+      } else {
+	expected_K1_face_values   = exp_K1;
+	expected_K1_vertex_values = smesh.computeVertexValuesFromFaceValues( exp_K1 );
+      }
+      if ( exp_K2.size() == smesh.nbVertices() )	{
+	  expected_K2_face_values   = smesh.computeFaceValuesFromVertexValues( exp_K2 );
+	  expected_K2_vertex_values = exp_K2;
+      } else {
+	expected_K2_face_values   = exp_K2;
+	expected_K2_vertex_values = smesh.computeVertexValuesFromFaceValues( exp_K2 );
+      }
+      if ( exp_D1.size() == smesh.nbVertices() )	{
+	expected_D1_face_values   = smesh.computeFaceUnitVectorsFromVertexUnitVectors( exp_D1 );
+	expected_D1_vertex_values = exp_D1;
+      } else {
+	expected_D1_face_values   = exp_D1;
+	expected_D1_vertex_values = smesh.computeFaceUnitVectorsFromVertexUnitVectors( exp_D1 );
+      }
+      if ( exp_D2.size() == smesh.nbVertices() )	{
+	expected_D2_face_values   = smesh.computeFaceUnitVectorsFromVertexUnitVectors( exp_D2 );
+	expected_D2_vertex_values = exp_D2;
+      } else {
+	expected_D2_face_values   = exp_D2;
+	expected_D2_vertex_values = smesh.computeFaceUnitVectorsFromVertexUnitVectors( exp_D2 );
       }
     }
   trace.endBlock();
