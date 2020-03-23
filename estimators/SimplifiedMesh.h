@@ -264,6 +264,9 @@ namespace DGtal
 
     /// @return the average of the length of edges.
     Scalar averageEdgeLength() const;
+    /// @param f any valid face index
+    /// @return the average distance between the centroid of face \a f and its vertices.
+    Scalar localWindow( Face f ) const;
 
     /// Perturbate the positions with a uniform random noise of 'p *
     /// averageEdgeLength' along arbitrary directions.

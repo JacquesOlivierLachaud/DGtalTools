@@ -356,6 +356,19 @@ averageEdgeLength() const
 
 //-----------------------------------------------------------------------------
 template <typename TRealPoint, typename TRealVector>
+typename DGtal::SimplifiedMesh<TRealPoint, TRealVector>::Scalar
+DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
+localWindow( Face f ) const
+{
+  const RealPoint x = faceCentroid( f );
+  Scalar local_length = 0.0;
+  for ( auto v : incidentVertices()[ f ] )
+    local_length += ( myPositions[ v ] - x ).norm();
+  return local_length / incidentVertices()[ f ].size();
+}
+
+//-----------------------------------------------------------------------------
+template <typename TRealPoint, typename TRealVector>
 void
 DGtal::SimplifiedMesh<TRealPoint, TRealVector>::
 perturbateWithUniformRandomNoise( Scalar p )

@@ -301,14 +301,14 @@ struct CurvatureComputer
   /// Compute all curvatures from curvature measures, i.e. localize
   /// measure computations.
   bool computeCurvaturesFromMeasures();
-
   /// If face or vertex curvatures are not computed, interpolate them
   /// from the others.
   bool computeVertexFaceCurvatures();
-  /// Output measures (G, H, etc) as mesh OBJ files
-  bool outputMeasuresAsMeshObj();
-  /// Output errors (G, H, etc) as mesh OBJ files
-  bool outputErrorsAsMeshObj();
+
+  /// Output curvatures (G, H, etc) as mesh OBJ files
+  bool outputCurvaturesAsMeshObj();
+  /// Output curvature errors (G, H, etc) as mesh OBJ files
+  bool outputCurvatureErrorsAsMeshObj();
 
   //---------------------------------------------------------------------------
 public:
@@ -393,6 +393,14 @@ public:
   SH::RealVectors   measured_D1_face_values;
   /// Stores measured second (greatest) principal direction values (if applicable)
   SH::RealVectors   measured_D2_face_values;
+  /// Stores measured first (smallest) principal curvature values (if applicable)
+  SH::Scalars       measured_K1_vertex_values;
+  /// Stores measured second (greatest) principal curvature values (if applicable)
+  SH::Scalars       measured_K2_vertex_values;
+  /// Stores measured first (smallest) principal direction values (if applicable)
+  SH::RealVectors   measured_D1_vertex_values;
+  /// Stores measured second (greatest) principal direction values (if applicable)
+  SH::RealVectors   measured_D2_vertex_values;
 
   /// Provides statistics on expected Gaussian curvatures (if applicable)
   Statistic<double> stat_expected_G_curv;
@@ -432,8 +440,8 @@ int main( int argc, char** argv )
   CC.computeNormals();
   CC.computeCurvatures();
   CC.computeVertexFaceCurvatures();
-  CC.outputMeasuresAsMeshObj();
-  CC.outputErrorsAsMeshObj();
+  CC.outputCurvaturesAsMeshObj();
+  CC.outputCurvatureErrorsAsMeshObj();
   
 
   // const auto minValue         = vm[ "minValue" ].as<double>();
@@ -1647,7 +1655,7 @@ CurvatureComputer::computeNormalCycle()
   }
   time_mu_estimations = trace.endBlock();
 
-  // Compute CNC measures within balls
+  // Compute NC measures within balls
   trace.beginBlock( "Computes Normal cycle measures within balls" );
   const double mcoef = vm[ "m-coef"    ].as<double>();
   const double mpow  = vm[ "m-pow"     ].as<double>();
@@ -1664,7 +1672,7 @@ CurvatureComputer::computeNormalCycle()
       measured_ball_mu0 [ f ] = nc.mu0  ( std::get<2>( v_we_wf ) );
       measured_ball_mu1 [ f ] = nc.mu1  ( std::get<1>( v_we_wf ) );
       measured_ball_mu2 [ f ] = nc.mu2  ( std::get<0>( v_we_wf ) );
-      measured_ball_muXY[ f ] = nc.muXY1( std::get<1>( v_we_wf ) );
+      measured_ball_muXY[ f ] = nc.muXY2( std::get<1>( v_we_wf ) );
     }
   time_curv_estimations = trace.endBlock();
 
@@ -1698,6 +1706,42 @@ CurvatureComputer::computeVertexFaceCurvatures()
   else if ( ! measured_G_vertex_values.empty() )
     measured_G_face_values
       = smesh.computeFaceValuesFromVertexValues( measured_G_vertex_values );
+  if ( ! measured_K1_face_values.empty() )
+    {
+      if ( measured_K1_vertex_values.empty() )
+	measured_K1_vertex_values
+	  = smesh.computeVertexValuesFromFaceValues( measured_K1_face_values );
+    }
+  else if ( ! measured_K1_vertex_values.empty() )
+    measured_K1_face_values
+      = smesh.computeFaceValuesFromVertexValues( measured_K1_vertex_values );
+  if ( ! measured_K2_face_values.empty() )
+    {
+      if ( measured_K2_vertex_values.empty() )
+	measured_K2_vertex_values
+	  = smesh.computeVertexValuesFromFaceValues( measured_K2_face_values );
+    }
+  else if ( ! measured_K2_vertex_values.empty() )
+    measured_K2_face_values
+      = smesh.computeFaceValuesFromVertexValues( measured_K2_vertex_values );
+  if ( ! measured_D1_face_values.empty() )
+    {
+      if ( measured_D1_vertex_values.empty() )
+	measured_D1_vertex_values
+	  = smesh.computeVertexUnitVectorsFromFaceUnitVectors( measured_D1_face_values );
+    }
+  else if ( ! measured_D1_vertex_values.empty() )
+    measured_D1_face_values
+      = smesh.computeFaceUnitVectorsFromVertexUnitVectors( measured_D1_vertex_values );
+  if ( ! measured_D2_face_values.empty() )
+    {
+      if ( measured_D2_vertex_values.empty() )
+	measured_D2_vertex_values
+	  = smesh.computeVertexUnitVectorsFromFaceUnitVectors( measured_D2_face_values );
+    }
+  else if ( ! measured_D2_vertex_values.empty() )
+    measured_D2_face_values
+      = smesh.computeFaceUnitVectorsFromVertexUnitVectors( measured_D2_vertex_values );
   return true;
 }
 
@@ -1715,6 +1759,8 @@ CurvatureComputer::computeCurvaturesFromMeasures()
   measured_K2_face_values.resize( smesh.nbFaces() );
   measured_D1_face_values.resize( smesh.nbFaces() );
   measured_D2_face_values.resize( smesh.nbFaces() );
+  bool cnc = ( quantity == "CNC" );
+  bool nc  = ( quantity == "NC" );
   for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
     {
       if ( isnan( measured_ball_mu0[ i ] ) )
@@ -1725,8 +1771,8 @@ CurvatureComputer::computeCurvaturesFromMeasures()
       // Computing Gaussian curvature H
       measured_G_face_values[ i ] = area != 0.0	? measured_ball_mu2[ i ] / area	: 0.0;
       // Computing principal curvatures k1 and k2
-      auto M = measured_ball_muXY[ i ];
-      auto N = measured_normals[ i ];
+      auto M = measured_ball_muXY [ i ];
+      auto N = smesh.faceNormals()[ i ];
       M += M.transpose();
       M *= 0.5;
       const double   coef_N = 1000.0 * area;
@@ -1737,20 +1783,30 @@ CurvatureComputer::computeCurvaturesFromMeasures()
       auto V = M;
       RealVector L;
       EigenDecomposition< 3, double>::getEigenDecomposition( M, V, L );
-      measured_D1_face_values[ i ] = V.column( 0 );
-      measured_D2_face_values[ i ] = V.column( 1 );
-      measured_K1_face_values[ i ] = area != 0.0 ? -L[ 0 ] / area : 0.0;
-      measured_K2_face_values[ i ] = area != 0.0 ? -L[ 1 ] / area : 0.0;
+      if ( cnc )
+	{
+	  measured_D1_face_values[ i ] = V.column( 1 );
+	  measured_D2_face_values[ i ] = V.column( 0 );
+	  measured_K1_face_values[ i ] = area != 0.0 ? -L[ 1 ] / area : 0.0;
+	  measured_K2_face_values[ i ] = area != 0.0 ? -L[ 0 ] / area : 0.0;
+	}
+      else if ( nc )
+	{
+	  measured_D1_face_values[ i ] = V.column( 0 );
+	  measured_D2_face_values[ i ] = V.column( 1 );
+	  measured_K1_face_values[ i ] = area != 0.0 ? -L[ 1 ] / area : 0.0;
+	  measured_K2_face_values[ i ] = area != 0.0 ? -L[ 0 ] / area : 0.0;
+	}
     }
   trace.endBlock();
   return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
-/// Output measures (G, H, etc) as mesh OBJ files
+/// Output curvatures (G, H, etc) as mesh OBJ files
 /////////////////////////////////////////////////////////////////////////////
 bool
-CurvatureComputer::outputMeasuresAsMeshObj()
+CurvatureComputer::outputCurvaturesAsMeshObj()
 {
   const auto output_basefile  = vm[ "output"   ].as<std::string>();
   if ( output_basefile == "" || output_basefile == "none" ) return false;
@@ -1763,7 +1819,8 @@ CurvatureComputer::outputMeasuresAsMeshObj()
   const auto colormapG = SH::getColorMap
     ( ( minValue < 0.0 ? -1.0 : 1.0 ) * 0.5 * minValue*minValue,
       0.5 * maxValue*maxValue, params );
-  trace.beginBlock( "Output measures in mesh OBJ file" );
+
+  trace.beginBlock( "Output curvatures in mesh OBJ file" );
   auto output_objfile  = output_basefile + "-primal.obj";
   ofstream mesh_output( output_objfile.c_str() );
   bool okw = SimpleMeshWriter::writeOBJ( mesh_output, smesh );
@@ -1773,34 +1830,80 @@ CurvatureComputer::outputMeasuresAsMeshObj()
     return false;
   }
   trace.info() << "Writing mean and Gaussian curvature OBJ files." << std::endl;
-  auto colorsH = SH::Colors( smesh.nbFaces() );
-  auto colorsG = SH::Colors( smesh.nbFaces() );
-  for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
-    {
-      colorsH[ i ] = colormapH( measured_H_face_values[ i ] );
-      colorsG[ i ] = colormapG( measured_G_face_values[ i ] );
-    }
-  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colorsH );
-  okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G", smesh, colorsG );
-  if ( zt > 0.0 )
-    {
-      okw = SimpleMeshWriter::writeIsoLinesOBJ
-       	( output_basefile+"-H-zero", smesh,
-	  measured_H_face_values, measured_H_vertex_values, 0.0, zt );
-      okw = SimpleMeshWriter::writeIsoLinesOBJ
-       	( output_basefile+"-G-zero", smesh,
-	  measured_G_face_values, measured_G_vertex_values, 0.0, zt );
-    }
+  {
+    auto colorsH = SH::Colors( smesh.nbFaces() );
+    auto colorsG = SH::Colors( smesh.nbFaces() );
+    for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
+      {
+	colorsH[ i ] = colormapH( measured_H_face_values[ i ] );
+	colorsG[ i ] = colormapG( measured_G_face_values[ i ] );
+      }
+    okw = SimpleMeshWriter::writeOBJ( output_basefile+"-H", smesh, colorsH );
+    okw = SimpleMeshWriter::writeOBJ( output_basefile+"-G", smesh, colorsG );
+    if ( zt > 0.0 )
+      {
+	okw = SimpleMeshWriter::writeIsoLinesOBJ
+	  ( output_basefile+"-H-zero", smesh,
+	    measured_H_face_values, measured_H_vertex_values, 0.0, zt );
+	okw = SimpleMeshWriter::writeIsoLinesOBJ
+	  ( output_basefile+"-G-zero", smesh,
+	    measured_G_face_values, measured_G_vertex_values, 0.0, zt );
+      }
+  }
+  trace.info() << "Writing K1 and K2 curvature OBJ files." << std::endl;
+  {
+    auto colorsK1 = SH::Colors( smesh.nbFaces() );
+    auto colorsK2 = SH::Colors( smesh.nbFaces() );
+    for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
+      {
+	colorsK1[ i ] = colormapH( measured_K1_face_values[ i ] );
+	colorsK2[ i ] = colormapH( measured_K2_face_values[ i ] );
+      }
+    okw = SimpleMeshWriter::writeOBJ( output_basefile+"-K1", smesh, colorsK1 );
+    okw = SimpleMeshWriter::writeOBJ( output_basefile+"-K2", smesh, colorsK2 );
+    if ( zt > 0.0 )
+      {
+	okw = SimpleMeshWriter::writeIsoLinesOBJ
+	  ( output_basefile+"-K1-zero", smesh,
+	    measured_K1_face_values, measured_K1_vertex_values, 0.0, zt );
+	okw = SimpleMeshWriter::writeIsoLinesOBJ
+	  ( output_basefile+"-K2-zero", smesh,
+	    measured_K2_face_values, measured_K2_vertex_values, 0.0, zt );
+      }
+  }
+  trace.info() << "Writing D1 and D2 principal directions OBJ files." << std::endl;
+  {
+    const auto avg_e = smesh.averageEdgeLength();
+    SH::RealPoints positions( smesh.nbFaces() );
+    auto d1 = measured_D1_face_values;
+    for ( Index f = 0; f < positions.size(); ++f )
+      {
+	d1[ f ] *= smesh.localWindow( f );
+	positions[ f ] = smesh.faceCentroid( f ) - 0.5 * d1[ f ];
+      }
+    bool ok_d1 = SH::saveVectorFieldOBJ
+      ( positions, d1, 0.05 * avg_e, SH::Colors(),
+	output_basefile+"-D1-green", SH::Color::Black, SH::Color( 0, 128, 0 ) );
+    auto d2 = measured_D2_face_values;
+    for ( Index f = 0; f < positions.size(); ++f )
+      {
+	d2[ f ] *= smesh.localWindow( f );
+	positions[ f ] = smesh.faceCentroid( f ) - 0.5 * d2[ f ];
+      }
+    bool ok_d2 = SH::saveVectorFieldOBJ
+      ( positions, d2, 0.05 * avg_e, SH::Colors(),
+	output_basefile+"-D2-magenta", SH::Color::Black, SH::Color(128, 0,128 ) );
+  }
   trace.endBlock();
   return okw;
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
-/// Output errors (G, H, etc) as mesh OBJ files
+/// Output Curvature errors (G, H, etc) as mesh OBJ files
 /////////////////////////////////////////////////////////////////////////////
 bool
-CurvatureComputer::outputErrorsAsMeshObj()
+CurvatureComputer::outputCurvatureErrorsAsMeshObj()
 {
   bool okw = false;
   if ( ! ( in_polynomial || in_mesh ) ) return okw;
