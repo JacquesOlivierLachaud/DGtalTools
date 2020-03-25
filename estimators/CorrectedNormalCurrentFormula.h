@@ -43,11 +43,7 @@
 #include <iostream>
 #include <map>
 #include "DGtal/base/Common.h"
-#include "DGtal/topology/CDigitalSurfaceContainer.h"
-#include "DGtal/topology/IndexedDigitalSurface.h"
-#include "DGtal/graph/DistanceBreadthFirstVisitor.h"
 #include "DGtal/math/linalg/SimpleMatrix.h"
-#include "DGtal/math/linalg/EigenDecomposition.h"
 #include "SphericalTriangle.h"
 
 //////////////////////////////////////////////////////////////////////////////

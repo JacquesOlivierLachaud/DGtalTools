@@ -309,6 +309,13 @@ struct CurvatureComputer
   bool outputCurvaturesAsMeshObj();
   /// Output curvature errors (G, H, etc) as mesh OBJ files
   bool outputCurvatureErrorsAsMeshObj();
+  /// Output Curvature errors statistics.
+  bool outputCurvatureErrorStatistics();
+  /// Dedicated method for outputing the statistics of any scalar
+  /// curvature.
+  bool outputScalarCurvatureErrorStatistics
+  ( std::ostream& output, std::string information,
+    Scalars expected_values, Scalars measured_values );
 
   //---------------------------------------------------------------------------
 public:
@@ -317,6 +324,8 @@ public:
   po::options_description general_opt;
   /// Parsed command-line
   po::variables_map vm;
+  /// command-line as string
+  std::string       command_line;
   /// Input filename
   std::string       filename;
   /// Mesh name
@@ -329,6 +338,8 @@ public:
   std::string       anisotropy;
   /// Gridstep
   double            h;
+  /// Subdivision parameters for predefined meshes.
+  double            sub_m, sub_n;
   /// Parameters object
   Parameters        params;
   /// The simplified mesh on which all computations are done
@@ -442,7 +453,7 @@ int main( int argc, char** argv )
   CC.computeVertexFaceCurvatures();
   CC.outputCurvaturesAsMeshObj();
   CC.outputCurvatureErrorsAsMeshObj();
-  
+  CC.outputCurvatureErrorStatistics();
 
   // const auto minValue         = vm[ "minValue" ].as<double>();
   // const auto maxValue         = vm[ "maxValue" ].as<double>();
@@ -921,7 +932,7 @@ CurvatureComputer::CurvatureComputer()
     
   // //#endif
   general_opt.add_options()
-    ( "error", po::value<std::string>()->default_value( "error.txt" ), "the name of the output file that sum up l2 and loo errors in estimation." )
+    ( "error", po::value<std::string>()->default_value( "error" ), "the name of the output file that sum up l2 and loo errors in estimation." )
     ( "max-error", po::value<double>()->default_value( 0.2 ), "the error value corresponding to black." );
   // general_opt.add_options()
   //   ( "output,o", po::value<std::string>()->default_value( "none" ), "the basename for output obj files or none if no output obj is wanted." );
@@ -996,8 +1007,11 @@ CurvatureComputer::parseCommandLine( int argc, char** argv )
 		  << std::endl << std::endl;
       return false;
     }
-
-
+  
+  command_line = std::string( argv[ 0 ] );
+  for ( int i = 1; i < argc; ++i )
+    command_line += std::string( " " ) + std::string( argv[ i ] );
+  
   /////////////////////////////////////////////////////////////////////////////
   // Checking quantities
   /////////////////////////////////////////////////////////////////////////////
@@ -1335,6 +1349,8 @@ CurvatureComputer::buildPredefinedMesh()
       exp_K2= SimpleMeshHelper::sphereSecondPrincipalCurvatures( r, m, n );
       exp_D1= SimpleMeshHelper::sphereFirstPrincipalDirections ( r, m, n );
       exp_D2= SimpleMeshHelper::sphereSecondPrincipalDirections( r, m, n );
+      sub_m = m;
+      sub_n = n;
     }
   else if ( meshargs.size() >= 5 
 	    && ( meshname == "lantern" || meshname == "lantern-VN"
@@ -1356,6 +1372,8 @@ CurvatureComputer::buildPredefinedMesh()
       exp_K2= SimpleMeshHelper::lanternSecondPrincipalCurvatures( r, m, n );
       exp_D1= SimpleMeshHelper::lanternFirstPrincipalDirections ( r, m, n );
       exp_D2= SimpleMeshHelper::lanternSecondPrincipalDirections( r, m, n );
+      sub_m = m;
+      sub_n = n;
     }
   else if ( meshargs.size() >= 5 
 	    && ( meshname == "torus" || meshname == "torus-VN"
@@ -1378,6 +1396,8 @@ CurvatureComputer::buildPredefinedMesh()
       exp_K2= SimpleMeshHelper::torusSecondPrincipalCurvatures( R, r, m, n, twist );
       exp_D1= SimpleMeshHelper::torusFirstPrincipalDirections ( R, r, m, n, twist );
       exp_D2= SimpleMeshHelper::torusSecondPrincipalDirections( R, r, m, n, twist );
+      sub_m = m;
+      sub_n = n;
     }
   else
     in_mesh = false;
@@ -1505,7 +1525,7 @@ CurvatureComputer::computeNormals()
         smesh.computeVertexNormalsFromFaceNormals();
     }
   trace.info() << smesh << std::endl;
-  trace.endBlock();
+  time_normal_estimations += trace.endBlock();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1590,6 +1610,8 @@ bool
 CurvatureComputer::computeRusinkiewiczCurvatures()
 {
   typedef RusinkiewiczCurvatureFormula< RealPoint, RealVector > RZFormula;
+  typedef RZFormula::RealTensor2D   RealTensor2D;
+  typedef RZFormula::ColumnVector2D RealVector2D;
   if ( smesh.vertexNormals().empty() )
     {
       trace.warning() << "[CurvatureComputer::computeRusinkiewiczCurvatures]"
@@ -1597,9 +1619,14 @@ CurvatureComputer::computeRusinkiewiczCurvatures()
 		      << std::endl;
       return false;
     }
+  time_mu_estimations = 0.0;
   trace.beginBlock( "Compute Rusinkiewicz's curvatures" );
   measured_H_face_values.resize( smesh.nbFaces() );
   measured_G_face_values.resize( smesh.nbFaces() );
+  measured_K1_face_values.resize( smesh.nbFaces() );
+  measured_K2_face_values.resize( smesh.nbFaces() );
+  measured_D1_face_values.resize( smesh.nbFaces() );
+  measured_D2_face_values.resize( smesh.nbFaces() );
   Index idx_f = 0;
   for ( auto f : smesh.incidentVertices() )
     {
@@ -1612,6 +1639,17 @@ CurvatureComputer::computeRusinkiewiczCurvatures()
         }
       measured_H_face_values[ idx_f ] = RZFormula::meanCurvature( p, u );
       measured_G_face_values[ idx_f ] = RZFormula::gaussianCurvature( p, u );
+      const auto    II = RZFormula::secondFundamentalForm( p, u );
+      const auto basis = RZFormula::basis( p );
+      auto           V = II;
+      RealVector2D   L;
+      EigenDecomposition<2, double>::getEigenDecomposition( II, V, L );
+      measured_K1_face_values[ idx_f ] = L[ 0 ];      
+      measured_K2_face_values[ idx_f ] = L[ 1 ];      
+      measured_D1_face_values[ idx_f ] =
+	V.column( 0 )[ 0 ] * basis.first + V.column( 0 )[ 1 ] * basis.second;      
+      measured_D2_face_values[ idx_f ] =
+	V.column( 1 )[ 0 ] * basis.first + V.column( 1 )[ 1 ] * basis.second;      
       idx_f++;
     }
   time_curv_estimations = trace.endBlock();
@@ -1908,6 +1946,7 @@ CurvatureComputer::outputCurvatureErrorsAsMeshObj()
   bool okw = false;
   if ( ! ( in_polynomial || in_mesh ) ) return okw;
   const auto output_basefile  = vm[ "output"   ].as<std::string>();
+  if ( output_basefile == "" || output_basefile == "none" ) return false;
   const auto max_error    = vm[ "max-error" ].as<double>();
   const auto error_cmap   = getErrorColorMap( max_error );
   trace.beginBlock( "Output errors in mesh OBJ file" );
@@ -1943,4 +1982,123 @@ CurvatureComputer::outputCurvatureErrorsAsMeshObj()
   trace.endBlock();
   return okw;
 }
-      
+
+/////////////////////////////////////////////////////////////////////////////
+/// Output Curvature errors statistics.
+/////////////////////////////////////////////////////////////////////////////
+bool
+CurvatureComputer::outputCurvatureErrorStatistics()
+{
+  auto bname = vm[ "error" ].as<std::string>();
+  trace.beginBlock( "Output statistics" );
+  {
+    std::ofstream ferr;
+    ferr.open ( ( bname+"-stat-H.txt" ).c_str(),
+		std::ofstream::out | std::ofstream::app );
+    if ( ! ferr.good() )
+      trace.warning() << "Unable to open file: " << bname << "-stat-H.txt" << std::endl;
+    outputScalarCurvatureErrorStatistics( ferr, command_line,
+					  measured_H_face_values,
+					  expected_H_face_values );
+  }
+  {
+    std::ofstream ferr;
+    ferr.open ( ( bname+"-stat-G.txt" ).c_str(),
+		std::ofstream::out | std::ofstream::app );
+    if ( ! ferr.good() )
+      trace.warning() << "Unable to open file: " << bname << "-stat-G.txt" << std::endl;
+    outputScalarCurvatureErrorStatistics( ferr, command_line,
+					  measured_G_face_values,
+					  expected_G_face_values );
+  }
+  {
+    std::ofstream ferr;
+    ferr.open ( ( bname+"-stat-K1.txt" ).c_str(),
+		std::ofstream::out | std::ofstream::app );
+    if ( ! ferr.good() )
+      trace.warning() << "Unable to open file: " << bname << "-stat-K1.txt" << std::endl;
+    outputScalarCurvatureErrorStatistics( ferr, command_line,
+					  measured_K1_face_values,
+					  expected_K1_face_values );
+  }
+  {
+    std::ofstream ferr;
+    ferr.open ( ( bname+"-stat-K2.txt" ).c_str(),
+		std::ofstream::out | std::ofstream::app );
+    if ( ! ferr.good() )
+      trace.warning() << "Unable to open file: " << bname << "-stat-K2.txt" << std::endl;
+    outputScalarCurvatureErrorStatistics( ferr, command_line,
+					  measured_K2_face_values,
+					  expected_K2_face_values );
+  }
+  trace.endBlock();
+  return true;
+}
+
+bool
+CurvatureComputer::outputScalarCurvatureErrorStatistics
+( std::ostream& output, std::string information,
+  Scalars expected_values, Scalars measured_values )
+{
+  if ( measured_values.size() == 0 ) measured_values = expected_values;
+  if ( expected_values.size() == 0 ) expected_values = measured_values;
+  output << "######################################################################"
+	 << std::endl;
+  output << "# " << information << std::endl;
+  output << "# time_normal_estimations = "
+	 << time_normal_estimations << " ms" << std::endl
+	 << "# time_curv_estimations   = "
+	 << time_curv_estimations + time_mu_estimations << " ms" << std::endl
+	 << "# time_mu_estimations     = "
+	 << time_mu_estimations << " ms" << std::endl;
+  output << "# grid_h(1) subdi_m(2) subdi_n(3)"
+	 << " #vertic(4)  #edges(5)  #faces(6)"
+	 << "  err_L1(7)  err_L2(8) err_Loo(9)"
+	 << " ex_avg(10) ex_dev(11) ex_min(12) ex_max(13)"
+	 << " ms_avg(14) ms_dev(15) ms_min(16) ms_max(17)"
+	 << " er_avg(18) er_dev(19) er_min(20) er_max(21)";
+  output << " rho_rl(22) rho_dg(23) t_norm(24) t_curv(25)"
+	 << "   t_mu(26)" << std::endl;
+  auto err_values = SHG::getScalarsAbsoluteDifference( measured_values, expected_values );
+  Statistic<Scalar> stats_meas;
+  Statistic<Scalar> stats_exps;
+  Statistic<Scalar> stats_errs;
+  stats_meas.addValues( measured_values.cbegin(), measured_values.cend() );
+  stats_exps.addValues( expected_values.cbegin(), expected_values.cend() );
+  stats_errs.addValues( err_values.cbegin(), err_values.cend() );
+
+  output << std::setprecision(6) << std::fixed; 
+  output << std::setw(10) << h
+	 << " " << std::setw(10) << sub_m << " " << std::setw(10) << sub_n;
+  output << " " << std::setw(10) << smesh.nbVertices()
+	 << " " << std::setw(10) << smesh.nbEdges()
+	 << " " << std::setw(10) << smesh.nbFaces();
+  output << " " << std::setw(10) << SHG::getScalarsNormL1 ( measured_values, expected_values )
+	 << " " << std::setw(10) << SHG::getScalarsNormL2 ( measured_values, expected_values )
+	 << " " << std::setw(10) << SHG::getScalarsNormLoo( measured_values, expected_values );
+  output << " " << std::setw(10) << stats_exps.mean()
+	 << " " << std::setw(10) << sqrt( stats_exps.variance() )
+	 << " " << std::setw(10) << stats_exps.min()
+	 << " " << std::setw(10) << stats_exps.max();
+  output << " " << std::setw(10) << stats_meas.mean()
+	 << " " << std::setw(10) << sqrt( stats_meas.variance() )
+	 << " " << std::setw(10) << stats_meas.min()
+	 << " " << std::setw(10) << stats_meas.max();
+  output << " " << std::setw(10) << stats_errs.mean()
+	 << " " << std::setw(10) << sqrt( stats_errs.variance() )
+	 << " " << std::setw(10) << stats_errs.min()
+	 << " " << std::setw(10) << stats_errs.max();
+  const double rho_coef = vm[ "m-coef" ].as<double>();
+  const double rho_pow  = vm[ "m-pow" ].as<double>();
+  const double rho_real = rho_coef * pow( h, rho_pow );
+  const double rho_dig  = rho_real / h;
+  output << " " << std::setw(10) << rho_real
+	 << " " << std::setw(10) << rho_dig 
+	 << " " << std::setw(10) << time_normal_estimations
+	 << " " << std::setw(10) << (time_curv_estimations + time_mu_estimations)
+	 << " " << std::setw(10) << time_mu_estimations << std::endl;
+  output << "#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+	 << std::endl;
+  return true;
+}
+
