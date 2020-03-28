@@ -197,7 +197,7 @@ namespace DGtal
 	{ e[ 0 ] * e[ 0 ], e[ 0 ] * e[ 1 ], e[ 0 ] * e[ 2 ],
 	  e[ 1 ] * e[ 0 ], e[ 1 ] * e[ 1 ], e[ 1 ] * e[ 2 ],
 	  e[ 2 ] * e[ 0 ], e[ 2 ] * e[ 1 ], e[ 2 ] * e[ 2 ] };
-      return ( ( b - a ).norm() * angle ) * T;
+      return ( 0.5 * ( b - a ).norm() * angle ) * T; // JOL * 0.5
     }
 
     

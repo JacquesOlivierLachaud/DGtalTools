@@ -2038,7 +2038,7 @@ CurvatureComputer::outputCurvatureErrorStatistics()
 bool
 CurvatureComputer::outputScalarCurvatureErrorStatistics
 ( std::ostream& output, std::string information,
-  Scalars expected_values, Scalars measured_values )
+  Scalars measured_values, Scalars expected_values )
 {
   if ( measured_values.size() == 0 ) measured_values = expected_values;
   if ( expected_values.size() == 0 ) expected_values = measured_values;
