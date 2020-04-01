@@ -270,6 +270,7 @@ struct CurvatureComputer
   typedef CNCComputer::RealTensors              RealTensors;
   typedef std::vector< RealPoint >              RealPoints;
   typedef std::vector< RealVector >             RealVectors;
+  typedef GradientColorMap<Scalar>              ColorMap;
 
   /// Creates the object with the meaningful options.
   CurvatureComputer();
@@ -317,6 +318,10 @@ struct CurvatureComputer
   ( std::ostream& output, std::string information,
     Scalars expected_values, Scalars measured_values );
 
+  ColorMap computeGeometryTypeColormap();
+  Color computeGeometryColor( Scalar k1, Scalar k2,
+			      Scalar zero, Scalar max ) const;
+  
   //---------------------------------------------------------------------------
 public:
   
@@ -344,7 +349,8 @@ public:
   Parameters        params;
   /// The simplified mesh on which all computations are done
   SimpleMesh    smesh;
-  
+  /// ColorMap used for describing local geometry type (convexe, concave, etc).
+  ColorMap      geom_cmap;
   
   bool in_obj;
   bool in_vol;
@@ -886,6 +892,7 @@ int main( int argc, char** argv )
 /////////////////////////////////////////////////////////////////////////////
 CurvatureComputer::CurvatureComputer()
   : general_opt( "Allowed options are" ),
+    geom_cmap( -1.0, 1.0 ),
     bimage( nullptr ),
     shape ( nullptr ),
     surface( nullptr ),
@@ -939,6 +946,7 @@ CurvatureComputer::CurvatureComputer()
   general_opt.add_options()
     ( "digital-surface", po::value<std::string>()->default_value( "DUAL" ), "chooses which kind of digital surface is used for computations in DUAL|PRIMAL|PDUAL|PPRIMAL: DUAL dual marching-cubes surface, PRIMAL blocky quad primal surface, PDUAL same as DUAL but projected onto polynomial true surface (if possible), PPRIMAL same as PRIMAL but projected onto polynomial true surface (if possible).");
 
+  geom_cmap = computeGeometryTypeColormap();
 } 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1932,6 +1940,17 @@ CurvatureComputer::outputCurvaturesAsMeshObj()
       ( positions, d2, 0.05 * avg_e, SH::Colors(),
 	output_basefile+"-D2-magenta", SH::Color::Black, SH::Color(128, 0,128 ) );
   }
+  trace.info() << "Writing geometry type OBJ files." << std::endl;
+  {
+    auto colors = SH::Colors( smesh.nbFaces() );
+    for ( SH::Idx i = 0; i < smesh.nbFaces(); i++ )
+      {
+	colors[ i ] = computeGeometryColor( measured_K1_face_values[ i ],
+					    measured_K2_face_values[ i ],
+					    0.01, maxValue );
+      }
+    okw = SimpleMeshWriter::writeOBJ( output_basefile+"-GT", smesh, colors );
+  }
   trace.endBlock();
   return okw;
 }
@@ -2100,5 +2119,72 @@ CurvatureComputer::outputScalarCurvatureErrorStatistics
   output << "#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
 	 << std::endl;
   return true;
+}
+
+CurvatureComputer::ColorMap
+CurvatureComputer::computeGeometryTypeColormap()
+{
+  ColorMap gradcmap( -1.0, 1.0 );
+  gradcmap.addColor( Color( 0, 0, 255 ) ); // concave -1
+  // BLUE to BLUE   1.0 <= |k1/k2| <= 0.2, k1 <= k2  < 0.0
+  gradcmap.addColor( Color(   0,   0, 255 ) ); // concave -0.9
+  gradcmap.addColor( Color(   0,   0, 255 ) ); // concave -0.8
+  gradcmap.addColor( Color(   0,   0, 255 ) ); // concave -0.7
+  gradcmap.addColor( Color(   0,   0, 255 ) ); // concave -0.6
+  // BLUE to CYAN   0.2 <= |k1/k2| <= 0.0, k1 <= k2  < 0.0
+  gradcmap.addColor( Color(   0, 255, 255 ) ); // cyl ccv -0.5, k2 approx 0
+  // CYAN to GREEN  0.0 <= |k1/k2| <= 0.2, k1 <  0.0 < k2
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo -0.4
+  // GREEN to GREEN  0.2 <= min(|k2/k1|,|k1/k2|) <= 1, k1 <  0.0 < k2
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo -0.4
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo -0.3
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo -0.2
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo -0.1
+  gradcmap.addColor( Color(   0, 128,   0 ) ); // hyperbo  0.0
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo  0.1
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo  0.2
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo  0.3
+  gradcmap.addColor( Color(   0, 255,   0 ) ); // hyperbo  0.4
+  // GREEN TO YELLOW
+  gradcmap.addColor( Color( 255, 255,   0 ) ); // cyl cvx  0.5, k1 approx 0
+  // YELLOW TO RED   0.2 <= |k1/k2| <= 1.0, 0.0 < k1 <= k2
+  gradcmap.addColor( Color( 255,   0,   0 ) ); // convex   0.6
+  gradcmap.addColor( Color( 255,   0,   0 ) ); // convex   0.7
+  gradcmap.addColor( Color( 255,   0,   0 ) ); // convex   0.8
+  gradcmap.addColor( Color( 255,   0,   0 ) ); // convex   0.9
+  gradcmap.addColor( Color( 255,   0,   0 ) ); // convex   1.0
+  return gradcmap;
+}
+
+/// Given curvature \a k1 and \a k2, `k1 <= k2`, a near zero value \a
+/// zero, and a maximum value \a max, returns an associated color
+/// corresponding to its geometry type (convex, concave, hyperbolic,
+/// cylindric or flat).
+Color
+CurvatureComputer::computeGeometryColor( Scalar k1, Scalar k2,
+					 Scalar zero, Scalar max ) const
+{
+  if ( k2 < k1 ) std::swap( k1, k2 );
+  Scalar M = std::max( fabs( k1 ), fabs( k2 ) );
+  Scalar m = std::min( fabs( k1 ), fabs( k2 ) );
+  Scalar r = ( M <= zero ) ? 0.0 : m / M;
+  Color flat ( Color::White );
+  Color target( Color::Black );
+  if ( fabs( k1 ) <= zero && fabs( k2 ) <= zero ) return flat; // flat
+  if ( k2 < -zero ) // k1 <= k2 < 0.0, r = |k2| / |k1|
+    target = geom_cmap( std::max( -0.5 - r/2.0, -1.0 ) );
+  else if ( k2 <= zero ) // k1 < 0.0, k2 = 0
+    target = geom_cmap( -0.5 );
+  else if ( k1 < -zero ) 
+    target = ( fabs(k2) <= fabs(k1) )
+      ? geom_cmap( -0.5 + r/2.0 )
+      : geom_cmap(  0.5 - r/2.0 );
+  else if ( k1 <= zero ) // k1 = 0, k2 > 0.0 
+    target = geom_cmap( 0.5 );
+  else
+    target = geom_cmap( std::max( 0.5 + r/2.0, 1.0 ) );
+  Scalar s = std::min( M / max, 1.0 );
+  s = round( s * 8.0 ) / 8.0;
+  return (1.0 - s) * flat + s * target;
 }
 
