@@ -191,13 +191,15 @@ namespace DGtal
     {
       const RealVector diedre = right.crossProduct( left );
       const Scalar angle = ( diedre.dot( b - a) > 0.0 )
-	? asin( diedre.norm() ) : - asin( diedre.norm() );
-      const RealVector e  = (b - a).getNormalized();
-      const RealTensor T  =
+	?   asin( std::min( diedre.norm(), 1.0 ) )
+	: - asin( std::min( diedre.norm(), 1.0 ) );
+      const Scalar norm_ab = (b - a).norm();
+      const RealVector   e = norm_ab > 1e-10 ? (b - a) /  norm_ab : RealVector::zero;
+      const RealTensor   T =
 	{ e[ 0 ] * e[ 0 ], e[ 0 ] * e[ 1 ], e[ 0 ] * e[ 2 ],
 	  e[ 1 ] * e[ 0 ], e[ 1 ] * e[ 1 ], e[ 1 ] * e[ 2 ],
 	  e[ 2 ] * e[ 0 ], e[ 2 ] * e[ 1 ], e[ 2 ] * e[ 2 ] };
-      return ( 0.5 * ( b - a ).norm() * angle ) * T; // JOL * 0.5
+      return ( 0.5 * norm_ab * angle ) * T; // JOL * 0.5
     }
 
     

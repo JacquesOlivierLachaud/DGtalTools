@@ -215,6 +215,14 @@ namespace DGtal
     const std::vector< RealVector >& faceNormals() const
     { return myFaceNormals; }
 
+    /// @return a reference to the vector of normals to vertices.
+    std::vector< RealVector >& vertexNormals() 
+    { return myVertexNormals; }
+
+    /// @return a reference to the vector of normals to faces.
+    std::vector< RealVector >& faceNormals() 
+    { return myFaceNormals; }
+
     /// @return a const reference to the vector of neighbor faces for each face.
     const std::vector< Faces >& neighborFaces() const
     { return myNeighborFaces; }

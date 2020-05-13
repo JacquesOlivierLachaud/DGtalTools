@@ -458,7 +458,7 @@ computeFacesInclusionsInBall( Scalar r, Index f ) const
       return result;
     }
   RealPoint p = faceCentroid( f );
-  std::set< Index > marked;
+  std::unordered_set< Index > marked;
   std::queue< Index > active;
   active.push( f );
   marked.insert( f );

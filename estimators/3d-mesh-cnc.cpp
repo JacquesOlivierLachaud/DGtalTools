@@ -1487,6 +1487,7 @@ CurvatureComputer::perturbatePositions()
 {
   auto uniform_noise  = vm[ "uniform-noise" ].as<double>();  
   auto adaptive_noise = vm[ "adaptive-noise" ].as<double>();  
+  auto estimator      = vm[ "estimator" ].as<string>();
   if ( uniform_noise > 0.0 )
     {
       const auto eps = uniform_noise * smesh.averageEdgeLength();
@@ -1494,6 +1495,12 @@ CurvatureComputer::perturbatePositions()
     }
   if ( adaptive_noise > 0.0 )
     smesh.perturbateWithAdaptiveUniformRandomNoise( adaptive_noise );
+  if ( ( uniform_noise > 0.0 || adaptive_noise > 0.0 )
+       && ( estimator == "Geom" ) )
+    {
+      smesh.faceNormals().clear();
+      smesh.vertexNormals().clear();
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2168,6 +2175,7 @@ CurvatureComputer::computeGeometryColor( Scalar k1, Scalar k2,
   Scalar M = std::max( fabs( k1 ), fabs( k2 ) );
   Scalar m = std::min( fabs( k1 ), fabs( k2 ) );
   Scalar r = ( M <= zero ) ? 0.0 : m / M;
+  r = round( r * 8.0 ) / 8.0;
   Color flat ( Color::White );
   Color target( Color::Black );
   if ( fabs( k1 ) <= zero && fabs( k2 ) <= zero ) return flat; // flat
@@ -2184,7 +2192,7 @@ CurvatureComputer::computeGeometryColor( Scalar k1, Scalar k2,
   else
     target = geom_cmap( std::max( 0.5 + r/2.0, 1.0 ) );
   Scalar s = std::min( M / max, 1.0 );
-  s = round( s * 8.0 ) / 8.0;
+  s = round( s * 4.0 ) / 4.0;
   return (1.0 - s) * flat + s * target;
 }
 
