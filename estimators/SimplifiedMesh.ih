@@ -748,8 +748,8 @@ computeEdges()
       myEdgeRightFaces[ idx_e ] = edge2face_right[ e ];
       myEdgeFaces     [ idx_e ] = myEdgeRightFaces[ idx_e ];
       myEdgeFaces     [ idx_e ].insert( myEdgeFaces[ idx_e ].cend(),
-					myEdgeRightFaces[ idx_e ].cbegin(),
-					myEdgeRightFaces[ idx_e ].cend() );
+					myEdgeLeftFaces[ idx_e ].cbegin(),
+					myEdgeLeftFaces[ idx_e ].cend() );
       idx_e++;
     }
 }
